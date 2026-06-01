@@ -1,0 +1,1031 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import java.lang.String?>
+<?import javafx.collections.FXCollections?>
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.chart.*?>
+<?import javafx.scene.control.*?>
+<?import javafx.scene.image.*?>
+<?import javafx.scene.layout.*?>
+<?import javafx.scene.shape.*?>
+<BorderPane xmlns="http://javafx.com/javafx/17" xmlns:fx="http://javafx.com/fxml/1"
+            fx:controller="com.personal.kafka.pilot.ui.MainController"
+            prefHeight="700.0" prefWidth="1200.0">
+
+    <!-- Custom title bar -->
+    <top>
+        <VBox style="-fx-background-color: #1a252f;">
+            <!-- Common section: Kafka Brokers Management + Maven dependency -->
+            <GridPane hgap="10" vgap="5" style="-fx-padding: 6 15 6 15; -fx-background-color: #2c3e50;">
+                <columnConstraints>
+                    <ColumnConstraints minWidth="130" prefWidth="130"/>
+                    <ColumnConstraints hgrow="ALWAYS"/>
+                    <ColumnConstraints minWidth="90" prefWidth="90"/>
+                </columnConstraints>
+
+                <!-- Row 0: Active Pod (shows connected pod names only) -->
+                <Label text="Active Pod(s):" GridPane.rowIndex="0" GridPane.columnIndex="0"
+                       style="-fx-text-fill: #27ae60; -fx-font-weight: bold; -fx-font-size: 12px;"/>
+                <HBox spacing="10" alignment="CENTER_LEFT" GridPane.rowIndex="0" GridPane.columnIndex="1">
+                    <TextField fx:id="activePodsField" promptText="Not Connected" editable="false" HBox.hgrow="ALWAYS"
+                               style="-fx-background-color: #34495e; -fx-text-fill: #ecf0f1;"/>
+                </HBox>
+
+                <!-- Row 1: Selected for Work (dropdown + Connect) -->
+                <Label text="Selected for Work:" GridPane.rowIndex="1" GridPane.columnIndex="0"
+                       style="-fx-text-fill: #f39c12; -fx-font-weight: bold; -fx-font-size: 12px;"/>
+                <HBox spacing="8" alignment="CENTER_LEFT" GridPane.rowIndex="1" GridPane.columnIndex="1">
+                    <ComboBox fx:id="selectedForWorkComboBox" promptText="Select Pod for Operations"
+                              editable="false" HBox.hgrow="ALWAYS"/>
+                    <Button fx:id="connectButton" text="Connect" onAction="#handleConnect"
+                            styleClass="btn-green" style="-fx-font-size: 11px;"/>
+                </HBox>
+
+                <!-- Row 2: Broker Details (Name + Hosts + Add/Update/Del) -->
+                <Label text="Broker Details:" GridPane.rowIndex="2" GridPane.columnIndex="0"
+                       style="-fx-text-fill: #ecf0f1; -fx-font-weight: bold; -fx-font-size: 12px;"/>
+                <HBox spacing="8" alignment="CENTER_LEFT" GridPane.rowIndex="2" GridPane.columnIndex="1">
+                    <TextField fx:id="brokerNameField" promptText="Name (e.g., POD1)" prefWidth="150"/>
+                    <TextField fx:id="brokerServersField" promptText="host1:9092,host2:9092" HBox.hgrow="ALWAYS"/>
+                    <Button fx:id="addBrokerButton" text="Add" onAction="#handleAddBroker"
+                            styleClass="btn-green" style="-fx-font-size: 11px;"/>
+                    <Button fx:id="updateBrokerButton" text="Update" onAction="#handleUpdateBroker"
+                            style="-fx-font-size: 11px;"/>
+                    <Button fx:id="deleteBrokerButton" text="Delete" onAction="#handleDeleteBroker"
+                            style="-fx-font-size: 11px; -fx-text-fill: #c0392b;"/>
+                </HBox>
+
+                <!-- Row 3: SSL/TLS Configuration (Collapsible) - Right aligned below broker buttons -->
+                <HBox spacing="10" alignment="CENTER_LEFT" GridPane.rowIndex="3" GridPane.columnIndex="1">
+                    <TitledPane fx:id="sslConfigPane" text="SSL/TLS Configuration (Optional)" expanded="false" collapsible="true"
+                                HBox.hgrow="ALWAYS" prefWidth="800">
+                        <VBox spacing="8" style="-fx-padding: 8;">
+                            <!-- Security Protocol -->
+                            <HBox spacing="10" alignment="CENTER_LEFT">
+                                <Label text="Security Protocol:" minWidth="130"/>
+                                <ComboBox fx:id="sslSecurityProtocolCombo" promptText="PLAINTEXT" prefWidth="180">
+                                    <items>
+                                        <FXCollections fx:factory="observableArrayList">
+                                            <String fx:value="PLAINTEXT"/>
+                                            <String fx:value="SSL"/>
+                                            <String fx:value="SASL_PLAINTEXT"/>
+                                            <String fx:value="SASL_SSL"/>
+                                        </FXCollections>
+                                    </items>
+                                </ComboBox>
+                                <CheckBox fx:id="sslEnabledCheckBox" text="Enable SSL/TLS" style="-fx-text-fill: #333;"/>
+                            </HBox>
+
+                            <!-- Truststore Section -->
+                            <Label text="Truststore (Server Authentication):" style="-fx-font-weight: bold; -fx-font-size: 11px;"/>
+                            <HBox spacing="8" alignment="CENTER_LEFT">
+                                <Label text="Location:" minWidth="80"/>
+                                <TextField fx:id="sslTruststoreLocationField" promptText="/path/to/truststore.jks" HBox.hgrow="ALWAYS"/>
+                                <Button text="Browse..." onAction="#handleBrowseTruststore" style="-fx-font-size: 11px;"/>
+                            </HBox>
+                            <HBox spacing="8" alignment="CENTER_LEFT">
+                                <Label text="Password:" minWidth="80"/>
+                                <PasswordField fx:id="sslTruststorePasswordField" promptText="Truststore password" prefWidth="200"/>
+                                <Label text="Type:" minWidth="50"/>
+                                <ComboBox fx:id="sslTruststoreTypeCombo" promptText="JKS" prefWidth="100">
+                                    <items>
+                                        <FXCollections fx:factory="observableArrayList">
+                                            <String fx:value="JKS"/>
+                                            <String fx:value="PKCS12"/>
+                                        </FXCollections>
+                                    </items>
+                                </ComboBox>
+                            </HBox>
+
+                            <!-- Keystore Section (Mutual TLS) -->
+                            <Label text="Keystore (Client Authentication - Mutual TLS, Optional):" style="-fx-font-weight: bold; -fx-font-size: 11px;"/>
+                            <HBox spacing="8" alignment="CENTER_LEFT">
+                                <Label text="Location:" minWidth="80"/>
+                                <TextField fx:id="sslKeystoreLocationField" promptText="/path/to/keystore.jks (optional)" HBox.hgrow="ALWAYS"/>
+                                <Button text="Browse..." onAction="#handleBrowseKeystore" style="-fx-font-size: 11px;"/>
+                            </HBox>
+                            <HBox spacing="8" alignment="CENTER_LEFT">
+                                <Label text="Password:" minWidth="80"/>
+                                <PasswordField fx:id="sslKeystorePasswordField" promptText="Keystore password" prefWidth="200"/>
+                                <Label text="Type:" minWidth="50"/>
+                                <ComboBox fx:id="sslKeystoreTypeCombo" promptText="JKS" prefWidth="100">
+                                    <items>
+                                        <FXCollections fx:factory="observableArrayList">
+                                            <String fx:value="JKS"/>
+                                            <String fx:value="PKCS12"/>
+                                        </FXCollections>
+                                    </items>
+                                </ComboBox>
+                            </HBox>
+                            <HBox spacing="8" alignment="CENTER_LEFT">
+                                <Label text="Key Password:" minWidth="80"/>
+                                <PasswordField fx:id="sslKeyPasswordField" promptText="Private key password (if different)" prefWidth="280"/>
+                            </HBox>
+
+                            <!-- Endpoint Identification -->
+                            <HBox spacing="10" alignment="CENTER_LEFT">
+                                <Label text="Endpoint ID Algorithm:" minWidth="130"/>
+                                <ComboBox fx:id="sslEndpointAlgorithmCombo" promptText="https" prefWidth="150">
+                                    <items>
+                                        <FXCollections fx:factory="observableArrayList">
+                                            <String fx:value="https"/>
+                                            <String fx:value=""/>
+                                        </FXCollections>
+                                    </items>
+                                </ComboBox>
+                                <Label text="(empty = disable hostname verification)" style="-fx-font-size: 10px; -fx-text-fill: #666;"/>
+                            </HBox>
+
+                            <!-- SSL Status Label -->
+                            <Label fx:id="sslConfigStatusLabel" text="" style="-fx-font-size: 11px; -fx-text-fill: #27ae60;"/>
+                        </VBox>
+                    </TitledPane>
+                </HBox>
+
+                <!-- Row 4: Maven dependency -->
+                <Label text="Maven Dependency:" GridPane.rowIndex="4" GridPane.columnIndex="0"
+                       style="-fx-text-fill: #ecf0f1; -fx-font-weight: bold; -fx-font-size: 12px;"/>
+                <HBox spacing="10" alignment="CENTER_LEFT" GridPane.rowIndex="4" GridPane.columnIndex="1">
+                    <TextField fx:id="mavenDependencyField"
+                               promptText="groupId:artifactId:version"
+                               HBox.hgrow="ALWAYS"/>
+                    <Button text="Download" onAction="#handleDownloadDependency"
+                            styleClass="btn-blue" style="-fx-font-size: 12px;"/>
+                </HBox>
+
+                <!-- Row 5: Configuration -->
+                <Label text="Configuration:" GridPane.rowIndex="5" GridPane.columnIndex="0"
+                       style="-fx-text-fill: #ecf0f1; -fx-font-weight: bold; -fx-font-size: 12px;"/>
+                <HBox spacing="10" alignment="CENTER_LEFT" GridPane.rowIndex="5" GridPane.columnIndex="1">
+                    <ComboBox fx:id="configsCombo" promptText="Select saved config" prefWidth="200"/>
+                    <Button text="Load" onAction="#handleLoadConfig"/>
+                    <Button text="Save" onAction="#handleSaveConfig"/>
+                    <Button text="Delete" onAction="#handleDeleteConfig"
+                            style="-fx-font-size: 11px; -fx-text-fill: #c0392b;"/>
+                </HBox>
+            </GridPane>
+
+        </VBox>
+    </top>
+
+    <center>
+        <VBox spacing="0" style="-fx-fill-height: true;">
+            <!-- Main tab pane -->
+            <TabPane fx:id="mainTabPane" VBox.vgrow="ALWAYS" tabClosingPolicy="UNAVAILABLE"
+                     style="-fx-tab-min-height: 36px;" minHeight="300">
+
+                <!-- ===== TAB 1: Search ===== -->
+                <Tab text="🔍  Search">
+                    <BorderPane>
+                        <!-- Scrollable parameters in center -->
+                        <center>
+                            <ScrollPane fitToWidth="true">
+                                <VBox spacing="10" style="-fx-padding: 12;">
+                                <TitledPane text="Search Parameters" expanded="true" collapsible="false">
+                                    <GridPane hgap="10" vgap="8" style="-fx-padding: 10;">
+                                        <fx:define>
+                                            <ToggleGroup fx:id="searchPartitionGroup"/>
+                                            <ToggleGroup fx:id="searchTimeGroup"/>
+                                        </fx:define>
+                                        <columnConstraints>
+                                            <ColumnConstraints minWidth="160" prefWidth="160"/>
+                                            <ColumnConstraints hgrow="ALWAYS"/>
+                                        </columnConstraints>
+
+                                        <Label text="Topic: *" GridPane.rowIndex="0" GridPane.columnIndex="0"/>
+                                        <HBox spacing="5" alignment="CENTER_LEFT" GridPane.rowIndex="0" GridPane.columnIndex="1">
+                                            <ComboBox fx:id="searchTopicComboBox" promptText="Select or type topic" prefWidth="300" editable="true"/>
+                                        </HBox>
+
+                                        <Label text="Search Text:" GridPane.rowIndex="1" GridPane.columnIndex="0"/>
+                                        <HBox spacing="6" alignment="CENTER_LEFT" GridPane.rowIndex="1" GridPane.columnIndex="1">
+                                            <TextField fx:id="searchTextFilter" promptText="term 1 (optional)"
+                                                       HBox.hgrow="ALWAYS"/>
+                                            <ComboBox fx:id="searchOperatorCombo" prefWidth="70"/>
+                                            <TextField fx:id="searchTextFilter2" promptText="term 2 (optional)"
+                                                       HBox.hgrow="ALWAYS"/>
+                                        </HBox>
+
+                                        <Label text="Partition:" GridPane.rowIndex="2" GridPane.columnIndex="0"/>
+                                        <HBox spacing="10" alignment="CENTER_LEFT" GridPane.rowIndex="2" GridPane.columnIndex="1">
+                                            <RadioButton fx:id="searchAllPartitions" text="All" selected="true"
+                                                         toggleGroup="$searchPartitionGroup"/>
+                                            <RadioButton fx:id="searchSpecificPartition" text="Specific:"
+                                                         toggleGroup="$searchPartitionGroup"/>
+                                            <ComboBox fx:id="searchPartitionField" promptText="partition #" prefWidth="100"
+                                                       disable="true" editable="true"/>
+                                            <Label text="Offset:" disable="true" fx:id="offsetLabel"/>
+                                            <TextField fx:id="sourceOffsetField" promptText="optional — leave empty for latest" prefWidth="220"
+                                                       disable="true"/>
+                                        </HBox>
+
+                                        <Label text="Time Range:" GridPane.rowIndex="3" GridPane.columnIndex="0"/>
+                                        <HBox spacing="10" alignment="CENTER_LEFT" GridPane.rowIndex="3" GridPane.columnIndex="1">
+                                            <RadioButton fx:id="searchNoTimeRange" text="No filter" selected="true"
+                                                         toggleGroup="$searchTimeGroup"/>
+                                            <RadioButton fx:id="searchWithTimeRange" text="Time range:"
+                                                         toggleGroup="$searchTimeGroup"/>
+                                        </HBox>
+
+                                        <Label text="From:" GridPane.rowIndex="4" GridPane.columnIndex="0"/>
+                                        <HBox fx:id="searchFromTimeBox" spacing="5" alignment="CENTER_LEFT"
+                                              GridPane.rowIndex="4" GridPane.columnIndex="1" disable="true">
+                                            <DatePicker fx:id="searchFromDatePicker" prefWidth="140" promptText="From date"/>
+                                            <Spinner fx:id="searchFromHourSpinner" prefWidth="58" editable="true"/>
+                                            <Label text="h"/>
+                                            <Spinner fx:id="searchFromMinuteSpinner" prefWidth="58" editable="true"/>
+                                            <Label text="m"/>
+                                        </HBox>
+
+                                        <Label text="To:" GridPane.rowIndex="5" GridPane.columnIndex="0"/>
+                                        <HBox fx:id="searchToTimeBox" spacing="5" alignment="CENTER_LEFT"
+                                              GridPane.rowIndex="5" GridPane.columnIndex="1" disable="true">
+                                            <DatePicker fx:id="searchToDatePicker" prefWidth="140" promptText="To date"/>
+                                            <Spinner fx:id="searchToHourSpinner" prefWidth="58" editable="true"/>
+                                            <Label text="h"/>
+                                            <Spinner fx:id="searchToMinuteSpinner" prefWidth="58" editable="true"/>
+                                            <Label text="m"/>
+                                        </HBox>
+
+                                        <Label text="Max Results:" GridPane.rowIndex="6" GridPane.columnIndex="0"/>
+                                        <TextField fx:id="searchMaxResults" promptText="100  (used by Search All only)"
+                                                   GridPane.rowIndex="6" GridPane.columnIndex="1"/>
+
+                                        <Label text="Key Deserializer:" GridPane.rowIndex="7" GridPane.columnIndex="0"/>
+                                        <TextField fx:id="sourceKeyDeserializerField"
+                                                   promptText="org.apache.kafka.common.serialization.StringDeserializer"
+                                                   GridPane.rowIndex="7" GridPane.columnIndex="1"/>
+
+                                        <Label text="Value Deserializer:" GridPane.rowIndex="8" GridPane.columnIndex="0"/>
+                                        <TextField fx:id="searchValueDeserializerField"
+                                                   promptText="org.apache.kafka.common.serialization.StringDeserializer"
+                                                   GridPane.rowIndex="8" GridPane.columnIndex="1"/>
+
+                                        <HBox fx:id="searchFromBeginningBox" spacing="8" alignment="CENTER_LEFT"
+                                              GridPane.rowIndex="9" GridPane.columnIndex="1"
+                                              visible="true" managed="true">
+                                            <CheckBox fx:id="searchFromBeginningCheck" text="Search from beginning"/>
+                                            <Label text="⚠ Very slow — scans all messages from earliest offset"
+                                                   style="-fx-text-fill: #e67e22; -fx-font-size: 11px;"/>
+                                        </HBox>
+                                    </GridPane>
+                                </TitledPane>
+
+                                </VBox>
+                            </ScrollPane>
+                        </center>
+                        <!-- Action bar + Results always visible at bottom -->
+                        <bottom>
+                            <VBox>
+                                <!-- Action bar -->
+                                <HBox spacing="10" style="-fx-padding: 8 12 8 12; -fx-background-color: #f8f8f8; -fx-border-color: #ddd; -fx-border-width: 1 0 0 0;" alignment="CENTER_LEFT">
+                                    <Button fx:id="searchButton" text="🔍  Search All" onAction="#handleSearch"
+                                            styleClass="btn-purple" style="-fx-font-size: 13px; -fx-padding: 8 20;"/>
+                                    <Button fx:id="stopSearchButton" text="⏹ Stop" onAction="#handleStopSearch"
+                                            styleClass="btn-red" style="-fx-font-size: 13px; -fx-padding: 8 16;" disable="true"/>
+                                    <Button fx:id="peekOneButton" text="↓ Peek One" onAction="#handlePeekOne"
+                                            styleClass="btn-green" style="-fx-font-size: 13px; -fx-padding: 8 20;">
+                                        <tooltip><Tooltip text="Fetch one message (latest, or at specified offset when Specific partition is selected)"/></tooltip>
+                                    </Button>
+                                    <Button fx:id="startTailButton" text="⟳ Live Tail" onAction="#handleStartTail"
+                                            styleClass="btn-blue" style="-fx-font-size: 13px; -fx-padding: 8 20;">
+                                        <tooltip><Tooltip text="Poll for new messages every 5s — newest first. Stops after 200 messages or 5 minutes."/></tooltip>
+                                    </Button>
+                                    <Region HBox.hgrow="ALWAYS"/>
+                                    <Label fx:id="searchStatusLabel" text="" style="-fx-font-size: 12px; -fx-text-fill: #555;"/>
+                                    <Button fx:id="toggleSearchResultsButton" text="▲ Results" onAction="#handleToggleSearchResults"
+                                            style="-fx-font-size: 11px; -fx-padding: 6 12;"/>
+                                    <Button text="Export" onAction="#handleExportSearchResults"
+                                            style="-fx-font-size: 11px; -fx-padding: 6 12;"/>
+                                </HBox>
+                                <!-- Results -->
+                                <VBox fx:id="searchResultsBox" spacing="6" style="-fx-padding: 10;" prefHeight="250" minHeight="150" visible="false" managed="false">
+                                    <Label text="Results" style="-fx-font-size: 13px; -fx-font-weight: bold;"/>
+                                    <TextArea fx:id="searchResultsArea" editable="false" VBox.vgrow="ALWAYS" prefRowCount="10"
+                                              style="-fx-font-family: 'Courier New'; -fx-font-size: 11px;"
+                                              promptText="Results will appear here…"/>
+                                </VBox>
+                            </VBox>
+                        </bottom>
+                    </BorderPane>
+                </Tab>
+
+                <!-- ===== TAB 2: Push Messages ===== -->
+                <Tab text="📤  Push Messages">
+                    <VBox>
+                        <ScrollPane fitToWidth="true" VBox.vgrow="ALWAYS">
+                            <VBox spacing="12" style="-fx-padding: 15;">
+
+                                <TitledPane text="Message Template (JSON)" expanded="true" collapsible="false">
+                                    <VBox spacing="5" style="-fx-padding: 10;">
+                                        <TextArea fx:id="pushMessageTemplateArea" prefRowCount="7"/>
+                                    </VBox>
+                                </TitledPane>
+
+                                <TitledPane text="Destination &amp; Serializer" expanded="true" collapsible="false">
+                                    <GridPane hgap="10" vgap="8" style="-fx-padding: 10;">
+                                        <columnConstraints>
+                                            <ColumnConstraints minWidth="170" prefWidth="170"/>
+                                            <ColumnConstraints hgrow="ALWAYS"/>
+                                        </columnConstraints>
+
+                                        <Label text="Destination Topic: *" GridPane.rowIndex="0" GridPane.columnIndex="0"/>
+                                        <HBox spacing="5" alignment="CENTER_LEFT" GridPane.rowIndex="0" GridPane.columnIndex="1">
+                                            <ComboBox fx:id="pushTopicComboBox" promptText="Select or type topic" prefWidth="300" editable="true"/>
+                                        </HBox>
+
+                                        <Label text="Key Serializer:" GridPane.rowIndex="1" GridPane.columnIndex="0"/>
+                                        <TextField fx:id="keySerializerField"
+                                                   promptText="org.apache.kafka.common.serialization.StringSerializer"
+                                                   GridPane.rowIndex="1" GridPane.columnIndex="1"/>
+
+                                        <Label text="Value Serializer:" GridPane.rowIndex="2" GridPane.columnIndex="0"/>
+                                        <TextField fx:id="valueSerializerField"
+                                                   promptText="org.apache.kafka.common.serialization.StringSerializer"
+                                                   GridPane.rowIndex="2" GridPane.columnIndex="1"/>
+
+                                        <Label text="Protobuf Class Name:" GridPane.rowIndex="3" GridPane.columnIndex="0"/>
+                                        <TextField fx:id="protobufClassNameField"
+                                                   GridPane.rowIndex="3" GridPane.columnIndex="1"/>
+
+                                    </GridPane>
+                                </TitledPane>
+
+                                <TitledPane text="Target Partition and Key" expanded="true" collapsible="false">
+                                    <VBox spacing="8" style="-fx-padding: 10;">
+                                        <fx:define>
+                                            <ToggleGroup fx:id="partitionKeyGroup"/>
+                                        </fx:define>
+                                        <HBox spacing="10" alignment="CENTER_LEFT">
+                                            <RadioButton fx:id="partitionKeyAll" text="All (auto)" selected="true"
+                                                         toggleGroup="$partitionKeyGroup"/>
+                                        </HBox>
+                                        <HBox spacing="10" alignment="CENTER_LEFT">
+                                            <RadioButton fx:id="partitionKeySpecific" text="Specific partition:"
+                                                         toggleGroup="$partitionKeyGroup"/>
+                                            <ComboBox fx:id="targetPartitionField" promptText="partition #" prefWidth="100"
+                                                       disable="true" editable="true"/>
+                                        </HBox>
+                                        <HBox spacing="10" alignment="CENTER_LEFT">
+                                            <RadioButton fx:id="partitionKeyField" text="Use field from template as key:"
+                                                         toggleGroup="$partitionKeyGroup"/>
+                                            <ComboBox fx:id="keyFieldComboBox" promptText="Select field" prefWidth="150" disable="true"/>
+                                        </HBox>
+                                        <HBox spacing="10" alignment="CENTER_LEFT">
+                                            <RadioButton fx:id="partitionKeyConstant" text="Constant key:"
+                                                         toggleGroup="$partitionKeyGroup"/>
+                                            <TextField fx:id="keyConstantField" promptText="Enter key value" prefWidth="200" disable="true"/>
+                                        </HBox>
+                                    </VBox>
+                                </TitledPane>
+
+                                <TitledPane text="Test Configuration" expanded="true" collapsible="false">
+                                    <GridPane hgap="10" vgap="8" style="-fx-padding: 10;">
+                                        <columnConstraints>
+                                            <ColumnConstraints minWidth="170" prefWidth="170"/>
+                                            <ColumnConstraints hgrow="ALWAYS"/>
+                                        </columnConstraints>
+
+                                        <Label text="Total Messages: *" GridPane.rowIndex="0" GridPane.columnIndex="0"/>
+                                        <TextField fx:id="messageCountField" promptText="1"
+                                                   GridPane.rowIndex="0" GridPane.columnIndex="1"/>
+
+                                        <Label text="Thread Pool Size: *" GridPane.rowIndex="1" GridPane.columnIndex="0"/>
+                                        <TextField fx:id="threadPoolSizeField" promptText="1"
+                                                   GridPane.rowIndex="1" GridPane.columnIndex="1"/>
+
+                                        <Label text="Batch Size: *" GridPane.rowIndex="2" GridPane.columnIndex="0"/>
+                                        <TextField fx:id="batchSizeField" promptText="1"
+                                                   GridPane.rowIndex="2" GridPane.columnIndex="1"/>
+                                    </GridPane>
+                                </TitledPane>
+
+                                <TitledPane text="Field Manipulation" expanded="true" collapsible="false">
+                                    <VBox spacing="10" style="-fx-padding: 10;">
+
+                                        <!-- Auto-Increment -->
+                                        <Label text="Auto-Increment (fieldName:startValue:step)" style="-fx-font-weight: bold; -fx-font-size: 11px;"/>
+                                        <HBox spacing="6" alignment="CENTER_LEFT">
+                                            <ComboBox fx:id="autoIncrementFieldPicker" promptText="Pick field" prefWidth="160"/>
+                                            <TextField fx:id="autoIncrementStartField" promptText="start" prefWidth="60"/>
+                                            <TextField fx:id="autoIncrementStepField" promptText="step" prefWidth="60"/>
+                                            <Button text="+ Add" onAction="#handleAddAutoIncrement" style="-fx-font-size: 11px; -fx-padding: 3 10;"/>
+                                            <Button text="Clear" onAction="#handleClearAutoIncrement" style="-fx-font-size: 11px; -fx-padding: 3 10;"/>
+                                        </HBox>
+                                        <TextField fx:id="autoIncrementFieldsField" promptText="assetId:1000:1, id:1:1" style="-fx-font-size: 11px;"/>
+
+                                        <!-- Rotation -->
+                                        <Label text="Rotation (fieldName:val1,val2,val3 — semicolons separate fields)" style="-fx-font-weight: bold; -fx-font-size: 11px;"/>
+                                        <HBox spacing="6" alignment="CENTER_LEFT">
+                                            <ComboBox fx:id="rotationFieldPicker" promptText="Pick field" prefWidth="160"/>
+                                            <TextField fx:id="rotationValuesField" promptText="val1,val2,val3" prefWidth="200"/>
+                                            <Button text="+ Add" onAction="#handleAddRotation" style="-fx-font-size: 11px; -fx-padding: 3 10;"/>
+                                            <Button text="Clear" onAction="#handleClearRotation" style="-fx-font-size: 11px; -fx-padding: 3 10;"/>
+                                        </HBox>
+                                        <TextField fx:id="rotationFieldsField" promptText="customerId:100,200,300 ; region:us,eu,ap" style="-fx-font-size: 11px;"/>
+
+                                        <!-- Random UUID -->
+                                        <Label text="Random UUID (select fields, each gets a new UUID per message)" style="-fx-font-weight: bold; -fx-font-size: 11px;"/>
+                                        <HBox spacing="6" alignment="CENTER_LEFT">
+                                            <ComboBox fx:id="uuidFieldPicker" promptText="Pick field" prefWidth="160"/>
+                                            <Button text="+ Add" onAction="#handleAddUuid" style="-fx-font-size: 11px; -fx-padding: 3 10;"/>
+                                            <Button text="Clear" onAction="#handleClearUuid" style="-fx-font-size: 11px; -fx-padding: 3 10;"/>
+                                        </HBox>
+                                        <TextField fx:id="uuidFieldsField" promptText="requestId, traceId" style="-fx-font-size: 11px;"/>
+
+                                        <!-- Message Headers -->
+                                        <Label text="Message Headers (value optional — if empty, resolved from message field by key name)" style="-fx-font-weight: bold; -fx-font-size: 11px;"/>
+                                        <HBox spacing="6" alignment="CENTER_LEFT">
+                                            <ComboBox fx:id="headerKeyField" promptText="key (pick or type)" prefWidth="160" editable="true"/>
+                                            <Label text="=" style="-fx-font-size: 11px;"/>
+                                            <ComboBox fx:id="headerFieldPicker" promptText="value (pick field or type, optional)" prefWidth="210" editable="true"/>
+                                            <Button text="+ Add" onAction="#handleAddHeader" style="-fx-font-size: 11px; -fx-padding: 3 10;"/>
+                                            <Button text="Clear" onAction="#handleClearHeaders" style="-fx-font-size: 11px; -fx-padding: 3 10;"/>
+                                        </HBox>
+                                        <TextField fx:id="messageHeadersField" promptText="added headers appear here" style="-fx-font-size: 11px;"/>
+
+                                    </VBox>
+                                </TitledPane>
+
+                            </VBox>
+                        </ScrollPane>
+
+                        <!-- Push action bar -->
+                        <VBox spacing="6" style="-fx-padding: 10 15 8 15; -fx-background-color: #f0f0f0; -fx-border-color: #ddd; -fx-border-width: 1 0 0 0;">
+                            <HBox spacing="15" alignment="CENTER_LEFT">
+                                <Button fx:id="startButton" text="▶  Start Pushing" onAction="#handleStart"
+                                       styleClass="btn-green" style="-fx-font-size: 13px; -fx-padding: 8 24;"/>
+                                <Button fx:id="stopButton" text="■  Stop Pushing" onAction="#handleStop"
+                                       styleClass="btn-red" style="-fx-font-size: 13px; -fx-padding: 8 24;"/>
+                                <Region HBox.hgrow="ALWAYS"/>
+                                <Label fx:id="statusLabel" text="Status: Idle" style="-fx-font-size: 12px;"/>
+                            </HBox>
+                            <ProgressBar fx:id="progressBar" prefWidth="Infinity" prefHeight="14"/>
+                        </VBox>
+                    </VBox>
+                </Tab>
+
+                <!-- ===== TAB 3: Verify Consumption ===== -->
+                <Tab text="✅  Verify Consumption">
+                    <BorderPane>
+                        <center>
+                            <ScrollPane fitToWidth="true">
+                                <VBox spacing="12" style="-fx-padding: 15;">
+
+                                    <TitledPane text="Consumer Group &amp; Topic *" expanded="true" collapsible="false">
+                                        <VBox spacing="8" style="-fx-padding: 10;">
+                                            <GridPane hgap="10" vgap="8">
+                                                <columnConstraints>
+                                                    <ColumnConstraints minWidth="170" prefWidth="170"/>
+                                                    <ColumnConstraints hgrow="ALWAYS"/>
+                                                </columnConstraints>
+
+                                                <Label text="Topic: *" GridPane.rowIndex="0" GridPane.columnIndex="0"/>
+                                                <ComboBox fx:id="verifyTopicComboBox" promptText="topic to verify (auto-filled after push)"
+                                                          editable="true" GridPane.rowIndex="0" GridPane.columnIndex="1"/>
+
+                                                <Label text="Consumer Group(s): *" GridPane.rowIndex="1" GridPane.columnIndex="0"/>
+                                                <VBox GridPane.rowIndex="1" GridPane.columnIndex="1" spacing="5">
+                                                    <HBox spacing="8" alignment="CENTER_LEFT">
+                                                        <ComboBox fx:id="availableConsumerGroupsCombo" promptText="Select or type to add..."
+                                                                  editable="true" prefWidth="250"/>
+                                                        <Button text="Add" onAction="#handleAddConsumerGroup"
+                                                                styleClass="btn-blue" style="-fx-font-size: 11px; -fx-padding: 4 12;"/>
+                                                        <Button text="Load Groups" onAction="#handleFetchConsumerGroups"
+                                                                styleClass="btn-blue" style="-fx-font-size: 11px; -fx-padding: 4 12;"/>
+                                                    </HBox>
+                                                    <VBox spacing="3">
+                                                        <Label text="Selected Groups (click to remove)"
+                                                               style="-fx-font-size: 10px; -fx-text-fill: #555;"/>
+                                                        <ListView fx:id="selectedConsumerGroupsList"
+                                                                  prefHeight="100" prefWidth="350"
+                                                                  style="-fx-font-size: 11px;"/>
+                                                    </VBox>
+                                                    <Label text="One or more groups required. Select from dropdown or type to add manually."
+                                                           style="-fx-text-fill: #888; -fx-font-size: 10px;"/>
+                                                </VBox>
+                                            </GridPane>
+                                        </VBox>
+                                    </TitledPane>
+
+                                    <TitledPane text="Verification Timeout *" expanded="true" collapsible="false">
+                                        <GridPane hgap="10" vgap="8" style="-fx-padding: 10;">
+                                            <columnConstraints>
+                                                <ColumnConstraints minWidth="170" prefWidth="170"/>
+                                                <ColumnConstraints hgrow="ALWAYS"/>
+                                            </columnConstraints>
+                                            <Label text="Timeout (minutes): *" GridPane.rowIndex="0" GridPane.columnIndex="0"/>
+                                            <VBox GridPane.rowIndex="0" GridPane.columnIndex="1" spacing="3">
+                                                <TextField fx:id="verifyTimeoutField" text="10"
+                                                           promptText="10"
+                                                           style="-fx-pref-width: 80px;"/>
+                                                <Label text="Max time to wait for all messages to be consumed. Default: 10 minutes."
+                                                       style="-fx-text-fill: #888; -fx-font-size: 10px;"/>
+                                            </VBox>
+                                        </GridPane>
+                                    </TitledPane>
+
+                                    <TitledPane text="Partition → Target Offset (one per line: partition=offset)" expanded="true" collapsible="false">
+                                        <VBox spacing="6" style="-fx-padding: 10;">
+                                            <Label text="Auto-populated after a push run. Edit manually if needed."
+                                                   style="-fx-text-fill: #777; -fx-font-size: 11px;"/>
+                                            <TextArea fx:id="verifyPartitionOffsetsArea"
+                                                      promptText="e.g.  0=1000  (partition=offset, one per line)"
+                                                      prefRowCount="6"
+                                                      style="-fx-font-family: 'Courier New'; -fx-font-size: 12px;"/>
+                                            <HBox spacing="8">
+                                                <Button text="Auto-fill from Last Push" onAction="#handleAutoFillVerifyOffsets"
+                                                        styleClass="btn-blue" style="-fx-font-size: 11px; -fx-padding: 4 12;"/>
+                                                <Button text="Clear" onAction="#handleClearVerifyOffsets"
+                                                        style="-fx-font-size: 11px; -fx-padding: 4 12;"/>
+                                            </HBox>
+                                        </VBox>
+                                    </TitledPane>
+
+                                </VBox>
+                            </ScrollPane>
+                        </center>
+
+                        <bottom>
+                            <HBox spacing="12" style="-fx-padding: 8 12 8 12; -fx-background-color: #f8f8f8; -fx-border-color: #ddd; -fx-border-width: 1 0 0 0;" alignment="CENTER_LEFT">
+                                <Button fx:id="verifyStartButton" text="▶  Start Verification" onAction="#handleStartVerification"
+                                        styleClass="btn-green" style="-fx-font-size: 13px; -fx-padding: 8 20;"/>
+                                <Button fx:id="verifyStopButton" text="■  Stop" onAction="#handleStopVerification"
+                                        styleClass="btn-red" style="-fx-font-size: 13px; -fx-padding: 8 20;"
+                                        disable="true"/>
+                                <Region HBox.hgrow="ALWAYS"/>
+                                <Label fx:id="verifyStatusLabel" text="" style="-fx-font-size: 12px; -fx-text-fill: #555;"/>
+                            </HBox>
+                        </bottom>
+                    </BorderPane>
+                </Tab>
+
+                <!-- ===== TAB 4: Topic Management ===== -->
+                <Tab text="📋  Topics">
+                    <BorderPane>
+                        <center>
+                            <ScrollPane fitToWidth="true">
+                                <VBox spacing="12" style="-fx-padding: 15;">
+
+                                    <!-- Section 1: Describe Topic -->
+                                    <TitledPane text="1. Describe Topic" expanded="false" collapsible="true">
+                                        <VBox spacing="8" style="-fx-padding: 10;">
+                                            <HBox spacing="10" alignment="CENTER_LEFT">
+                                                <Label text="Topic:"/>
+                                                <ComboBox fx:id="describeTopicComboBox"
+                                                          promptText="Select topic..."
+                                                          editable="true" prefWidth="300"/>
+                                                <Button text="Describe" onAction="#handleDescribeTopic"
+                                                        styleClass="btn-blue" style="-fx-font-size: 12px;"/>
+                                                <Button text="Delete Topic" onAction="#handleDeleteTopic"
+                                                        style="-fx-font-size: 12px; -fx-text-fill: #c0392b;"/>
+                                                <Region HBox.hgrow="ALWAYS"/>
+                                                <Label fx:id="describeTopicStatusLabel" text=""
+                                                       style="-fx-font-size: 11px; -fx-text-fill: #555;"/>
+                                            </HBox>
+
+                                            <!-- Topic Details Output (inside Describe section, collapsed by default) -->
+                                            <TitledPane fx:id="topicDetailsPane" text="Topic Details" expanded="false" collapsible="true">
+                                                <VBox spacing="5" style="-fx-padding: 10;">
+                                                    <TextArea fx:id="topicDetailsArea"
+                                                              promptText="Topic details will appear here after clicking 'Describe'..."
+                                                              prefHeight="200" editable="false"
+                                                              style="-fx-font-family: 'Courier New'; -fx-font-size: 11px; -fx-control-inner-background: #f8f8f8;"/>
+                                                    
+                                                    <!-- Export Button for Topic Details -->
+                                                    <HBox spacing="10" alignment="CENTER_RIGHT">
+                                                        <Button text="Export Topic Details" onAction="#handleExportTopicDetails"
+                                                                style="-fx-font-size: 11px; -fx-background-color: #3498db; -fx-text-fill: white;"/>
+                                                    </HBox>
+                                                    
+                                                    <!-- Partition Offsets Table -->
+                                                    <TableView fx:id="partitionOffsetTable" prefHeight="150" style="-fx-font-size: 11px;">
+                                                        <columns>
+                                                            <TableColumn fx:id="partitionColumn" text="Partition" prefWidth="80"/>
+                                                            <TableColumn fx:id="earliestOffsetColumn" text="Earliest Offset" prefWidth="120"/>
+                                                            <TableColumn fx:id="latestOffsetColumn" text="Latest Offset" prefWidth="120"/>
+                                                            <TableColumn fx:id="messageCountColumn" text="Message Count" prefWidth="120"/>
+                                                        </columns>
+                                                        <columnResizePolicy>
+                                                            <TableView fx:constant="CONSTRAINED_RESIZE_POLICY"/>
+                                                        </columnResizePolicy>
+                                                    </TableView>
+                                                    
+                                                    <!-- Export Button -->
+                                                    <HBox spacing="10" alignment="CENTER_RIGHT">
+                                                        <Button text="Export Topic Details" onAction="#handleExportTopic"
+                                                                style="-fx-font-size: 11px; -fx-background-color: #27ae60; -fx-text-fill: white;"/>
+                                                    </HBox>
+                                                </VBox>
+                                            </TitledPane>
+                                        </VBox>
+                                    </TitledPane>
+
+                                    <!-- Section 2: Update Topic Config -->
+                                    <TitledPane text="2. Update Topic Config" expanded="false" collapsible="true">
+                                        <VBox spacing="8" style="-fx-padding: 10;">
+                                            <HBox spacing="10" alignment="CENTER_LEFT">
+                                                <Label text="Topic:"/>
+                                                <ComboBox fx:id="updateTopicComboBox"
+                                                          promptText="Select topic..."
+                                                          editable="true" prefWidth="300"/>
+                                            </HBox>
+
+                                            <!-- Config Reference List -->
+                                            <TitledPane text="Available Config Names (click to copy)" expanded="false" collapsible="true">
+                                                <VBox spacing="5" style="-fx-padding: 8;">
+                                                    <ListView fx:id="topicConfigNamesList" prefHeight="120"
+                                                              styleClass="config-names-list">
+                                                        <items>
+                                                            <FXCollections fx:factory="observableArrayList">
+                                                                <String fx:value="compression.type"/>
+                                                                <String fx:value="delete.retention.ms"/>
+                                                                <String fx:value="file.delete.delay.ms"/>
+                                                                <String fx:value="flush.messages"/>
+                                                                <String fx:value="flush.ms"/>
+                                                                <String fx:value="follower.replication.throttled.replicas"/>
+                                                                <String fx:value="index.interval.bytes"/>
+                                                                <String fx:value="leader.replication.throttled.replicas"/>
+                                                                <String fx:value="max.message.bytes"/>
+                                                                <String fx:value="message.format.version"/>
+                                                                <String fx:value="message.timestamp.difference.max.ms"/>
+                                                                <String fx:value="message.timestamp.type"/>
+                                                                <String fx:value="min.cleanable.dirty.ratio"/>
+                                                                <String fx:value="min.compaction.lag.ms"/>
+                                                                <String fx:value="min.insync.replicas"/>
+                                                                <String fx:value="preallocate"/>
+                                                                <String fx:value="retention.bytes"/>
+                                                                <String fx:value="retention.ms"/>
+                                                                <String fx:value="segment.bytes"/>
+                                                                <String fx:value="segment.index.bytes"/>
+                                                                <String fx:value="segment.jitter.ms"/>
+                                                                <String fx:value="segment.ms"/>
+                                                                <String fx:value="unclean.leader.election.enable"/>
+                                                                <String fx:value="cleanup.policy"/>
+                                                                <String fx:value="compression.type"/>
+                                                            </FXCollections>
+                                                        </items>
+                                                    </ListView>
+                                                </VBox>
+                                            </TitledPane>
+
+                                            <VBox spacing="5">
+                                                <Label text="Configs to Update (key=value, one per line):"
+                                                       style="-fx-font-size: 11px; -fx-font-weight: bold;"/>
+                                                <TextArea fx:id="updateTopicConfigsArea"
+                                                          promptText="retention.ms=604800000&#10;cleanup.policy=delete"
+                                                          prefHeight="100" wrapText="false"
+                                                          style="-fx-font-family: 'Courier New'; -fx-font-size: 11px;"/>
+                                            </VBox>
+
+                                            <HBox spacing="10" alignment="CENTER_LEFT">
+                                                <Button text="Update Config" onAction="#handleUpdateTopicConfig"
+                                                        styleClass="btn-blue" style="-fx-font-size: 12px;"/>
+                                                <Region HBox.hgrow="ALWAYS"/>
+                                                <Label fx:id="updateTopicStatusLabel" text=""
+                                                       style="-fx-font-size: 11px; -fx-text-fill: #555;"/>
+                                            </HBox>
+                                        </VBox>
+                                    </TitledPane>
+
+                                    <!-- Section 3: Create Topic -->
+                                    <TitledPane text="3. Create Topic" expanded="false" collapsible="true">
+                                        <VBox spacing="8" style="-fx-padding: 10;">
+                                            <GridPane hgap="10" vgap="8">
+                                                <columnConstraints>
+                                                    <ColumnConstraints minWidth="100" prefWidth="100"/>
+                                                    <ColumnConstraints hgrow="ALWAYS"/>
+                                                </columnConstraints>
+
+                                                <Label text="Topic Name: *" GridPane.rowIndex="0" GridPane.columnIndex="0"/>
+                                                <TextField fx:id="newTopicNameField"
+                                                           promptText="e.g., my-topic"
+                                                           GridPane.rowIndex="0" GridPane.columnIndex="1"/>
+
+                                                <Label text="Partitions: *" GridPane.rowIndex="1" GridPane.columnIndex="0"/>
+                                                <HBox spacing="10" alignment="CENTER_LEFT"
+                                                      GridPane.rowIndex="1" GridPane.columnIndex="1">
+                                                    <TextField fx:id="newTopicPartitionsField"
+                                                               promptText="6" prefWidth="80" text="6"/>
+                                                    <Label text="(default: 6)"
+                                                           style="-fx-font-size: 10px; -fx-text-fill: #888;"/>
+                                                </HBox>
+
+                                                <Label text="Replication: *" GridPane.rowIndex="2" GridPane.columnIndex="0"/>
+                                                <HBox spacing="10" alignment="CENTER_LEFT"
+                                                      GridPane.rowIndex="2" GridPane.columnIndex="1">
+                                                    <TextField fx:id="newTopicReplicationField"
+                                                               promptText="3" prefWidth="80" text="3"/>
+                                                    <Label text="(1 to broker count, default: 3)"
+                                                           style="-fx-font-size: 10px; -fx-text-fill: #888;"/>
+                                                </HBox>
+                                            </GridPane>
+
+                                            <!-- Config Reference List for Create -->
+                                            <TitledPane text="Available Config Names (click to copy)" expanded="false" collapsible="true">
+                                                <VBox spacing="5" style="-fx-padding: 8;">
+                                                    <ListView fx:id="createTopicConfigNamesList" prefHeight="120"
+                                                              styleClass="config-names-list">
+                                                        <items>
+                                                            <FXCollections fx:factory="observableArrayList">
+                                                                <String fx:value="compression.type"/>
+                                                                <String fx:value="delete.retention.ms"/>
+                                                                <String fx:value="file.delete.delay.ms"/>
+                                                                <String fx:value="flush.messages"/>
+                                                                <String fx:value="flush.ms"/>
+                                                                <String fx:value="follower.replication.throttled.replicas"/>
+                                                                <String fx:value="index.interval.bytes"/>
+                                                                <String fx:value="leader.replication.throttled.replicas"/>
+                                                                <String fx:value="max.message.bytes"/>
+                                                                <String fx:value="message.format.version"/>
+                                                                <String fx:value="message.timestamp.difference.max.ms"/>
+                                                                <String fx:value="message.timestamp.type"/>
+                                                                <String fx:value="min.cleanable.dirty.ratio"/>
+                                                                <String fx:value="min.compaction.lag.ms"/>
+                                                                <String fx:value="min.insync.replicas"/>
+                                                                <String fx:value="preallocate"/>
+                                                                <String fx:value="retention.bytes"/>
+                                                                <String fx:value="retention.ms"/>
+                                                                <String fx:value="segment.bytes"/>
+                                                                <String fx:value="segment.index.bytes"/>
+                                                                <String fx:value="segment.jitter.ms"/>
+                                                                <String fx:value="segment.ms"/>
+                                                                <String fx:value="unclean.leader.election.enable"/>
+                                                                <String fx:value="cleanup.policy"/>
+                                                                <String fx:value="compression.type"/>
+                                                            </FXCollections>
+                                                        </items>
+                                                    </ListView>
+                                                </VBox>
+                                            </TitledPane>
+
+                                            <VBox spacing="5">
+                                                <Label text="Initial Configs (key=value, one per line - optional):"
+                                                       style="-fx-font-size: 11px; -fx-font-weight: bold;"/>
+                                                <TextArea fx:id="createTopicConfigsArea"
+                                                          promptText="retention.ms=604800000&#10;cleanup.policy=delete&#10;compression.type=producer"
+                                                          prefHeight="80" wrapText="false"
+                                                          style="-fx-font-family: 'Courier New'; -fx-font-size: 11px;"/>
+                                            </VBox>
+
+                                            <HBox spacing="10" alignment="CENTER_LEFT">
+                                                <Button text="Create Topic" onAction="#handleCreateTopic"
+                                                        styleClass="btn-green" style="-fx-font-size: 12px;"/>
+                                                <Region HBox.hgrow="ALWAYS"/>
+                                                <Label fx:id="createTopicStatusLabel" text=""
+                                                       style="-fx-font-size: 11px; -fx-text-fill: #555;"/>
+                                            </HBox>
+                                        </VBox>
+                                    </TitledPane>
+
+                                    
+                                </VBox>
+                            </ScrollPane>
+                        </center>
+                    </BorderPane>
+                </Tab>
+
+                <!-- ===== TAB 5: Consumer Groups ===== -->
+                <Tab text="👥  Groups">
+                    <BorderPane>
+                        <center>
+                            <ScrollPane fitToWidth="true">
+                                <VBox spacing="12" style="-fx-padding: 15;">
+
+                                    <!-- Section 1: Describe Consumer Group -->
+                                    <TitledPane text="1. Describe Consumer Group" expanded="false" collapsible="true">
+                                        <VBox spacing="8" style="-fx-padding: 10;">
+                                            <HBox spacing="10" alignment="CENTER_LEFT">
+                                                <Label text="Topic:"/>
+                                                <ComboBox fx:id="cgTopicComboBox"
+                                                          promptText="Select topic..."
+                                                          editable="true" prefWidth="250"/>
+                                                <Label text="Consumer Group:"/>
+                                                <ComboBox fx:id="cgConsumerGroupComboBox"
+                                                          promptText="Select group..."
+                                                          editable="true" prefWidth="200"/>
+                                                <Button text="Load Groups" onAction="#handleLoadConsumerGroupsForTopic"
+                                                        styleClass="btn-blue" style="-fx-font-size: 11px; -fx-padding: 4 12;"/>
+                                                <Button text="Describe Group" onAction="#handleDescribeConsumerGroup"
+                                                        styleClass="btn-blue" style="-fx-font-size: 12px;"/>
+                                                <Region HBox.hgrow="ALWAYS"/>
+                                                <Label fx:id="cgDescribeStatusLabel" text=""
+                                                       style="-fx-font-size: 11px; -fx-text-fill: #555;"/>
+                                            </HBox>
+
+                                            <!-- Group Details Output (inside Describe section, collapsed by default) -->
+                                            <TitledPane fx:id="cgDetailsPane" text="Group Details" expanded="false" collapsible="true">
+                                                <VBox spacing="5" style="-fx-padding: 10;">
+                                                    <TextArea fx:id="cgDetailsArea"
+                                                              promptText="Consumer group details will appear here..."
+                                                              prefHeight="200" editable="false"
+                                                              style="-fx-font-family: 'Courier New'; -fx-font-size: 11px; -fx-control-inner-background: #f8f8f8;"/>
+                                                    
+                                                    <!-- Export Button -->
+                                                    <HBox spacing="10" alignment="CENTER_RIGHT">
+                                                        <Button text="Export Group Details" onAction="#handleExportGroup"
+                                                                style="-fx-font-size: 11px; -fx-background-color: #27ae60; -fx-text-fill: white;"/>
+                                                    </HBox>
+                                                </VBox>
+                                            </TitledPane>
+                                        </VBox>
+                                    </TitledPane>
+
+                                    <!-- Section 2: Consumer Lag -->
+                                    <TitledPane text="2. Consumer Lag" expanded="false" collapsible="true">
+                                        <VBox spacing="8" style="-fx-padding: 10;">
+                                            <!-- Row 1: topic/group selectors + buttons -->
+                                            <HBox spacing="10" alignment="CENTER_LEFT">
+                                                <Label text="Topic:"/>
+                                                <ComboBox fx:id="cgLagTopicComboBox"
+                                                          promptText="Select topic..."
+                                                          editable="true" prefWidth="250"/>
+                                                <Label text="Consumer Group:"/>
+                                                <ComboBox fx:id="cgLagConsumerGroupComboBox"
+                                                          promptText="Select group..."
+                                                          editable="true" prefWidth="200"/>
+                                                <Button text="Load Groups" onAction="#handleLoadConsumerGroupsForLagTopic"
+                                                        styleClass="btn-blue" style="-fx-font-size: 11px; -fx-padding: 4 12;"/>
+                                                <Button text="▶ Start Live Lag" onAction="#handleRefreshConsumerLag"
+                                                        styleClass="btn-blue" style="-fx-font-size: 12px;"/>
+                                                <Button fx:id="stopLagButton" text="■ Stop" onAction="#handleStopLag"
+                                                        styleClass="btn-red" style="-fx-font-size: 12px;" disable="true"/>
+                                                <Region HBox.hgrow="ALWAYS"/>
+                                                <Label fx:id="cgLagLiveLabel" text=""
+                                                       style="-fx-font-size: 11px; -fx-text-fill: #27ae60; -fx-font-weight: bold;"/>
+                                                <Label fx:id="cgLagStatusLabel" text=""
+                                                       style="-fx-font-size: 11px; -fx-text-fill: #555;"/>
+                                            </HBox>
+
+                                            <!-- Row 2: total lag + last updated -->
+                                            <HBox spacing="20" alignment="CENTER_LEFT">
+                                                <Label fx:id="cgTotalLagLabel" text="Total Lag: -"
+                                                       style="-fx-font-size: 12px; -fx-font-weight: bold;"/>
+                                                <Label fx:id="cgLagLastUpdatedLabel" text=""
+                                                       style="-fx-font-size: 11px; -fx-text-fill: #888;"/>
+                                            </HBox>
+
+                                            <!-- Lag Table (partition detail) -->
+                                            <TableView fx:id="cgLagTable" prefHeight="180">
+                                                <columns>
+                                                    <TableColumn text="Partition" prefWidth="75"/>
+                                                    <TableColumn text="Committed" prefWidth="100"/>
+                                                    <TableColumn text="End Offset" prefWidth="100"/>
+                                                    <TableColumn text="Lag" prefWidth="75"/>
+                                                    <TableColumn fx:id="cgLagBarColumn" text="Lag Bar" prefWidth="160"/>
+                                                    <TableColumn text="Member ID" prefWidth="140"/>
+                                                    <TableColumn text="Client ID" prefWidth="130"/>
+                                                </columns>
+                                            </TableView>
+
+                                            <!-- Export Buttons for Lag Table -->
+                                            <HBox spacing="10" alignment="CENTER_RIGHT">
+                                                <Button text="Export Lag Table" onAction="#handleExportLagTable"
+                                                        style="-fx-font-size: 11px; -fx-background-color: #27ae60; -fx-text-fill: white;"/>
+                                            </HBox>
+
+                                            <!-- Total Lag Trend Chart -->
+                                            <Label text="Total Lag Trend"
+                                                   style="-fx-font-size: 11px; -fx-font-weight: bold; -fx-text-fill: #555;"/>
+                                            <LineChart fx:id="cgLagTrendChart" prefHeight="160" animated="false"
+                                                       style="-fx-padding: 0; -fx-font-size: 10px;">
+                                                <xAxis>
+                                                    <CategoryAxis fx:id="cgLagChartXAxis" label="" tickLabelRotation="-45"/>
+                                                </xAxis>
+                                                <yAxis>
+                                                    <NumberAxis fx:id="cgLagChartYAxis" label="Lag" forceZeroInRange="true"/>
+                                                </yAxis>
+                                            </LineChart>
+
+                                            <!-- Export Button for Lag Chart -->
+                                            <HBox spacing="10" alignment="CENTER_RIGHT">
+                                                <Button text="Export Lag Chart" onAction="#handleExportLagChart"
+                                                        style="-fx-font-size: 11px; -fx-background-color: #3498db; -fx-text-fill: white;"/>
+                                            </HBox>
+                                        </VBox>
+                                    </TitledPane>
+
+                                    <!-- Section 3: Reset Offsets -->
+                                    <TitledPane text="3. Reset Offsets" expanded="false" collapsible="true">
+                                        <VBox spacing="8" style="-fx-padding: 10;">
+                                            <HBox spacing="10" alignment="CENTER_LEFT">
+                                                <Label text="Topic:"/>
+                                                <ComboBox fx:id="cgResetTopicComboBox"
+                                                          promptText="Select topic..."
+                                                          editable="true" prefWidth="250"/>
+                                                <Label text="Consumer Group:"/>
+                                                <ComboBox fx:id="cgResetGroupIdComboBox"
+                                                          promptText="Select group..."
+                                                          editable="true" prefWidth="200"/>
+                                                <Button text="Load Groups" onAction="#handleLoadConsumerGroupsForReset"
+                                                        styleClass="btn-blue" style="-fx-font-size: 11px; -fx-padding: 4 12;"/>
+                                            </HBox>
+
+                                            <HBox spacing="10" alignment="CENTER_LEFT">
+                                                <Label text="Reset Strategy:"/>
+                                                <ComboBox fx:id="cgResetStrategyCombo" prefWidth="180">
+                                                    <items>
+                                                        <FXCollections fx:factory="observableArrayList">
+                                                            <String fx:value="earliest"/>
+                                                            <String fx:value="latest"/>
+                                                            <String fx:value="to-datetime"/>
+                                                            <String fx:value="shift-by"/>
+                                                        </FXCollections>
+                                                    </items>
+                                                </ComboBox>
+                                            </HBox>
+
+                                            <HBox spacing="10" alignment="CENTER_LEFT">
+                                                <Label fx:id="cgResetValueLabel" text="Date/Time:" />
+                                                <DatePicker fx:id="cgResetDatePicker" prefWidth="140" promptText="Select date" />
+                                                <Spinner fx:id="cgResetHourSpinner" prefWidth="58" editable="true" />
+                                                <Label text="h" />
+                                                <Spinner fx:id="cgResetMinuteSpinner" prefWidth="58" editable="true" />
+                                                <Label text="m" />
+                                                <Label fx:id="cgResetValueHintLabel" text=""
+                                                       style="-fx-font-size: 10px; -fx-text-fill: #888;"/>
+                                            </HBox>
+
+                                            <HBox spacing="10" alignment="CENTER_LEFT">
+                                                <Label text="Shift By:" />
+                                                <TextField fx:id="cgResetShiftField" promptText="e.g., -100 or +50" prefWidth="140" />
+                                                <Label text="offsets (use +/- for direction)" style="-fx-font-size: 10px; -fx-text-fill: #888;"/>
+                                            </HBox>
+
+                                            <HBox spacing="10" alignment="CENTER_LEFT">
+                                                <Button text="Reset Offsets" onAction="#handleResetOffsets"
+                                                        styleClass="btn-orange" style="-fx-font-size: 12px;"/>
+                                                <Region HBox.hgrow="ALWAYS"/>
+                                                <Label fx:id="cgResetStatusLabel" text=""
+                                                       style="-fx-font-size: 11px; -fx-text-fill: #555;"/>
+                                            </HBox>
+                                        </VBox>
+                                    </TitledPane>
+
+                                    
+                                </VBox>
+                            </ScrollPane>
+                        </center>
+                    </BorderPane>
+                </Tab>
+
+            </TabPane>
+
+            <!-- ===== Shared console (both tabs) ===== -->
+            <VBox fx:id="pushConsoleBox" spacing="0" style="-fx-background-color: #1e1e1e; -fx-border-color: #bdc3c7; -fx-border-width: 1 0 0 0;"
+                  prefHeight="0" minHeight="0" visible="false" managed="false" VBox.vgrow="NEVER">
+                <TextArea fx:id="consoleOutput" editable="false" VBox.vgrow="ALWAYS"
+                          style="-fx-font-family: 'Courier New'; -fx-font-size: 12px; -fx-text-fill: #e0e0e0; -fx-control-inner-background: #1e1e1e;"
+                          promptText="Console output appears here..."/>
+            </VBox>
+
+            <!-- Console Toggle Bar (always visible) -->
+            <HBox spacing="8" alignment="CENTER_LEFT" style="-fx-padding: 3 10 3 10; -fx-background-color: #2c3e50; -fx-border-color: #bdc3c7; -fx-border-width: 1 0 0 0;">
+                <Button fx:id="toggleConsoleButton" text="▲ Logs" onAction="#handleToggleConsole"
+                        styleClass="btn-dark" style="-fx-font-size: 11px; -fx-padding: 2 8;"/>
+                <Region HBox.hgrow="ALWAYS"/>
+                <Button fx:id="clearConsoleButton" text="Clear" onAction="#handleClear"
+                        styleClass="btn-dark" style="-fx-font-size: 11px; -fx-padding: 2 8;" visible="false" managed="false"/>
+                <Button fx:id="exportConsoleButton" text="Export" onAction="#handleExportResults"
+                        styleClass="btn-dark" style="-fx-font-size: 11px; -fx-padding: 2 8;" visible="false" managed="false"/>
+            </HBox>
+
+            <!-- JVM Metrics bar -->
+            <HBox spacing="20" alignment="CENTER_LEFT"
+                  style="-fx-padding: 3 15 3 15; -fx-background-color: #1a252f; -fx-border-color: #2c3e50; -fx-border-width: 1 0 0 0;">
+                <Label text="JVM:" style="-fx-text-fill: #7f8c8d; -fx-font-size: 10px; -fx-font-weight: bold;"/>
+                <HBox spacing="4" alignment="CENTER_LEFT">
+                    <Label text="Heap:" style="-fx-text-fill: #7f8c8d; -fx-font-size: 10px;"/>
+                    <Label fx:id="metricsHeapLabel" text="-- MB / -- MB"
+                           style="-fx-text-fill: #27ae60; -fx-font-size: 10px; -fx-font-weight: bold;"/>
+                </HBox>
+                <HBox spacing="4" alignment="CENTER_LEFT">
+                    <Label text="Threads:" style="-fx-text-fill: #7f8c8d; -fx-font-size: 10px;"/>
+                    <Label fx:id="metricsThreadsLabel" text="--"
+                           style="-fx-text-fill: #3498db; -fx-font-size: 10px; -fx-font-weight: bold;"/>
+                </HBox>
+                <HBox spacing="4" alignment="CENTER_LEFT">
+                    <Label text="CPU:" style="-fx-text-fill: #7f8c8d; -fx-font-size: 10px;"/>
+                    <Label fx:id="metricsCpuLabel" text="--%"
+                           style="-fx-text-fill: #e67e22; -fx-font-size: 10px; -fx-font-weight: bold;"/>
+                </HBox>
+                <HBox spacing="4" alignment="CENTER_LEFT">
+                    <Label text="GC:" style="-fx-text-fill: #7f8c8d; -fx-font-size: 10px;"/>
+                    <Label fx:id="metricsGcLabel" text="-- collections"
+                           style="-fx-text-fill: #9b59b6; -fx-font-size: 10px; -fx-font-weight: bold;"/>
+                </HBox>
+            </HBox>
+        </VBox>
+    </center>
+
+    <!-- Hidden holders for fx:ids still referenced by controller -->
+    <bottom>
+        <VBox managed="false" visible="false" maxHeight="0" minHeight="0" prefHeight="0">
+            <TextField fx:id="sourceTopicField"/>
+            <TextField fx:id="sourcePartitionField"/>
+            <TextArea fx:id="messageTemplateArea"/>
+        </VBox>
+    </bottom>
+
+
+</BorderPane>

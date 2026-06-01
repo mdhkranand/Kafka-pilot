@@ -1,0 +1,65 @@
+/* ===== Config names list (topic config reference lists) ===== */
+.config-names-list {
+    -fx-background-color: white;
+    -fx-control-inner-background: white;
+}
+.config-names-list .list-cell {
+    -fx-background-color: white;
+    -fx-text-fill: #333333;
+    -fx-font-size: 12px;
+}
+.config-names-list .list-cell:filled:hover {
+    -fx-background-color: #e8f0fe;
+    -fx-text-fill: #1a1a1a;
+}
+.config-names-list .list-cell:filled:selected {
+    -fx-background-color: #2980b9;
+    -fx-text-fill: white;
+}
+
+/* ===== Global button press effect ===== */
+.button:pressed {
+    -fx-scale-x: 0.95;
+    -fx-scale-y: 0.95;
+    -fx-opacity: 0.85;
+}
+
+/* ===== Coloured button variants ===== */
+.btn-green {
+    -fx-background-color: #27ae60;
+    -fx-text-fill: white;
+    -fx-font-weight: bold;
+}
+.btn-green:hover  { -fx-background-color: #2ecc71; }
+.btn-green:pressed { -fx-background-color: #1e8449; -fx-scale-x: 0.95; -fx-scale-y: 0.95; -fx-opacity: 0.85; }
+
+.btn-red {
+    -fx-background-color: #e74c3c;
+    -fx-text-fill: white;
+    -fx-font-weight: bold;
+}
+.btn-red:hover  { -fx-background-color: #f15a4a; }
+.btn-red:pressed { -fx-background-color: #b03a2e; -fx-scale-x: 0.95; -fx-scale-y: 0.95; -fx-opacity: 0.85; }
+
+.btn-blue {
+    -fx-background-color: #2980b9;
+    -fx-text-fill: white;
+    -fx-font-weight: bold;
+}
+.btn-blue:hover  { -fx-background-color: #3498db; }
+.btn-blue:pressed { -fx-background-color: #1f618d; -fx-scale-x: 0.95; -fx-scale-y: 0.95; -fx-opacity: 0.85; }
+
+.btn-purple {
+    -fx-background-color: #8e44ad;
+    -fx-text-fill: white;
+    -fx-font-weight: bold;
+}
+.btn-purple:hover  { -fx-background-color: #a569bd; }
+.btn-purple:pressed { -fx-background-color: #6c3483; -fx-scale-x: 0.95; -fx-scale-y: 0.95; -fx-opacity: 0.85; }
+
+.btn-dark {
+    -fx-background-color: #34495e;
+    -fx-text-fill: white;
+}
+.btn-dark:hover  { -fx-background-color: #4a6278; }
+.btn-dark:pressed { -fx-background-color: #1c2833; -fx-scale-x: 0.95; -fx-scale-y: 0.95; -fx-opacity: 0.85; }
