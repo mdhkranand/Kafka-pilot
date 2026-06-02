@@ -76,6 +76,7 @@ public class KafkaConsumerVerifier {
         log("");
 
         long verifyStartTime = System.currentTimeMillis();
+        Long consumptionStartTime = null; // Set when first activity is detected
 
         try (AdminClient admin = AdminClient.create(props)) {
 
@@ -83,7 +84,14 @@ public class KafkaConsumerVerifier {
             Map<Integer, Long> rateStartCommitted = new HashMap<>();
             long rateStartTime = System.currentTimeMillis();
 
+            // Track consumption metrics per partition
+            Map<Integer, Long> partitionFirstCommit = new HashMap<>(); // First seen committed offset
+            Map<Integer, Long> partitionStartTime = new HashMap<>(); // When first commit was seen
+            Map<Integer, Long> partitionDoneTime = new HashMap<>(); // When partition completed
+            Map<Integer, Long> partitionInitialCommitted = new HashMap<>(); // Initial committed offset
+
             Set<Integer> done = new HashSet<>();
+            boolean startTimeLogged = false;
 
             while (!shouldStop) {
 
@@ -113,10 +121,23 @@ public class KafkaConsumerVerifier {
                         "Partition", "Target Offset", "Committed", "Lag", "Rate (msg/s)", "Status"));
                 log("─────────────────────────────────────────────────────────────────");
 
+                // Track if any consumption activity is detected (for start time)
+                boolean anyActivity = false;
+
                 for (PartitionTarget pt : targets) {
                     TopicPartition tp = new TopicPartition(topic, pt.partition);
                     long committed = committedOffsets.getOrDefault(tp, -1L);
                     long leo = logEndOffsets.getOrDefault(tp, -1L);
+
+                    // Track first activity for consumption start time
+                    if (committed >= 0) {
+                        if (!partitionFirstCommit.containsKey(pt.partition)) {
+                            partitionFirstCommit.put(pt.partition, committed);
+                            partitionStartTime.put(pt.partition, System.currentTimeMillis());
+                            partitionInitialCommitted.put(pt.partition, committed);
+                        }
+                        anyActivity = true;
+                    }
 
                     long lag = (committed >= 0 && pt.targetOffset > 0)
                             ? Math.max(0, pt.targetOffset - committed)
@@ -133,7 +154,18 @@ public class KafkaConsumerVerifier {
                         status = "⏳ No commit yet";
                     } else if (lag <= 0) {
                         status = "✓ DONE";
-                        done.add(pt.partition);
+                        if (!done.contains(pt.partition)) {
+                            done.add(pt.partition);
+                            partitionDoneTime.put(pt.partition, System.currentTimeMillis());
+                            // Calculate and log per-partition stats
+                            long partStart = partitionStartTime.getOrDefault(pt.partition, partitionDoneTime.get(pt.partition));
+                            long partDuration = partitionDoneTime.get(pt.partition) - partStart;
+                            long messagesConsumed = committed - partitionInitialCommitted.getOrDefault(pt.partition, committed);
+                            if (messagesConsumed < 0) messagesConsumed = 0;
+                            double partAvgMs = messagesConsumed > 0 ? (double) partDuration / messagesConsumed : 0;
+                            log(String.format("  Partition %d COMPLETED in %s (~%.2f ms/msg, %d messages)",
+                                    pt.partition, formatDuration(partDuration), partAvgMs, messagesConsumed));
+                        }
                     } else {
                         status = "⏳ pending";
                     }
@@ -147,19 +179,93 @@ public class KafkaConsumerVerifier {
                     previousCommitted.put(pt.partition, committed);
                 }
 
+                // Set consumption start time on first activity
+                if (anyActivity && consumptionStartTime == null) {
+                    consumptionStartTime = System.currentTimeMillis();
+                    log("⏱ Consumption started — tracking message consumption times...");
+                }
+
                 boolean allDone = done.size() == targets.size();
 
                 log("");
 
                 if (allDone) {
                     long totalMs = System.currentTimeMillis() - verifyStartTime;
-                    log("╔══════════════════════════════════════════════════════╗");
-                    log("║           ALL MESSAGES CONSUMED                      ║");
-                    log("╠══════════════════════════════════════════════════════╣");
-                    log(String.format("║  Partitions verified : %-28d║", targets.size()));
-                    log(String.format("║  Total time          : %-28s║", formatDuration(totalMs)));
-                    log(String.format("║  Consumer group      : %-28s║", consumerGroup));
-                    log("╚══════════════════════════════════════════════════════╝");
+                    Long consumptionEndTime = System.currentTimeMillis();
+                    long consumptionMs = consumptionStartTime != null
+                            ? (consumptionEndTime - consumptionStartTime)
+                            : 0;
+
+                    // Calculate detailed metrics
+                    long totalMessages = 0;
+                    long minDuration = Long.MAX_VALUE;
+                    long maxDuration = 0;
+                    long sumDuration = 0;
+                    int completedPartitions = 0;
+                    int fastestPartition = -1;
+                    int slowestPartition = -1;
+                    Map<Integer, Long> partitionMessages = new HashMap<>();
+
+                    for (PartitionTarget pt : targets) {
+                        Long doneTime = partitionDoneTime.get(pt.partition);
+                        Long startTime = partitionStartTime.get(pt.partition);
+                        Long initialCommitted = partitionInitialCommitted.get(pt.partition);
+                        if (doneTime != null && startTime != null && initialCommitted != null) {
+                            long duration = doneTime - startTime;
+                            long messages = committedOffsets.getOrDefault(new TopicPartition(topic, pt.partition), initialCommitted) - initialCommitted;
+                            if (messages < 0) messages = 0;
+                            totalMessages += messages;
+                            partitionMessages.put(pt.partition, messages);
+                            if (duration < minDuration) {
+                                minDuration = duration;
+                                fastestPartition = pt.partition;
+                            }
+                            if (duration > maxDuration) {
+                                maxDuration = duration;
+                                slowestPartition = pt.partition;
+                            }
+                            sumDuration += duration;
+                            completedPartitions++;
+                        }
+                    }
+
+                    double avgDuration = completedPartitions > 0 ? (double) sumDuration / completedPartitions : 0;
+                    double avgMsPerMsg = (consumptionMs > 0 && totalMessages > 0)
+                            ? (double) consumptionMs / totalMessages
+                            : 0;
+                    double msgsPerSecond = consumptionMs > 0
+                            ? (totalMessages * 1000.0) / consumptionMs
+                            : 0;
+
+                    log("╔══════════════════════════════════════════════════════════════════════╗");
+                    log("║                    ALL MESSAGES CONSUMED                             ║");
+                    log("╠══════════════════════════════════════════════════════════════════════╣");
+                    log(String.format("║  Partitions verified : %-44d║", targets.size()));
+                    log(String.format("║  Total messages      : %-44d║", totalMessages));
+                    log("╠══════════════════════════════════════════════════════════════════════╣");
+                    log("║  TIMING SUMMARY                                                      ║");
+                    log(String.format("║  Total elapsed time  : %-44s║", formatDuration(totalMs)));
+                    if (consumptionStartTime != null) {
+                        log(String.format("║  Consumption time    : %-44s║", formatDuration(consumptionMs)));
+                        log(String.format("║  Messages/second     : %-44.2f║", msgsPerSecond));
+                        log(String.format("║  Avg time per msg    : %-44.2f║", avgMsPerMsg));
+                    }
+                    log("╠══════════════════════════════════════════════════════════════════════╣");
+                    log("║  PER-PARTITION SUMMARY                                               ║");
+                    log(String.format("║  Fastest partition   : partition %-3d (%s)%25s║",
+                            fastestPartition, completedPartitions > 0 ? formatDuration(minDuration) : "N/A", ""));
+                    log(String.format("║  Slowest partition   : partition %-3d (%s)%25s║",
+                            slowestPartition, completedPartitions > 0 ? formatDuration(maxDuration) : "N/A", ""));
+                    log(String.format("║  Avg per partition   : %-44s║", completedPartitions > 0 ? String.format("%.0f ms", avgDuration) : "N/A"));
+                    log("╠══════════════════════════════════════════════════════════════════════╣");
+                    log("║  PARTITION DETAILS (messages consumed)                               ║");
+                    for (PartitionTarget pt : targets) {
+                        Long messages = partitionMessages.get(pt.partition);
+                        if (messages != null) {
+                            log(String.format("║    Partition %-3d     : %-44d║", pt.partition, messages));
+                        }
+                    }
+                    log("╚══════════════════════════════════════════════════════════════════════╝");
                     break;
                 }
 

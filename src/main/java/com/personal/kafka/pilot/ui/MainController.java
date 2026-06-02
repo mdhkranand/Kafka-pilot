@@ -386,6 +386,21 @@ public class MainController {
     private MavenDependencyResolver mavenResolver;
     private ScheduledExecutorService metricsScheduler;
 
+    // --- Console Logging: Batched with Auto-Clear ---
+    private static final int CONSOLE_BATCH_SIZE = 100;        // Flush every N messages
+    private static final int CONSOLE_MAX_LINES = 10000;       // Auto-clear threshold
+    private static final int CONSOLE_FLUSH_INTERVAL_MS = 100; // Flush every 100ms
+    private final java.util.concurrent.ConcurrentLinkedQueue<String> consoleLogQueue = new java.util.concurrent.ConcurrentLinkedQueue<>();
+    private final java.util.concurrent.atomic.AtomicBoolean consoleFlushInProgress = new java.util.concurrent.atomic.AtomicBoolean(false);
+    private volatile boolean consoleAutoFlushEnabled = true;
+    private ScheduledExecutorService consoleFlushScheduler;
+
+    // --- In-Memory Storage: Last Search Results ---
+    // Stores partition -> max offset for quick access even when UI is frozen
+    private final java.util.concurrent.ConcurrentHashMap<Integer, Long> lastSearchPartitionOffsets = new java.util.concurrent.ConcurrentHashMap<>();
+    private volatile String lastSearchTopic = null;
+    private final java.util.concurrent.atomic.AtomicReference<String> lastSearchMessageTemplate = new java.util.concurrent.atomic.AtomicReference<>();
+
     // --- State: Live Tail ---
     private volatile boolean tailInProgress = false;
     private final java.util.concurrent.atomic.AtomicBoolean tailStopFlag = new java.util.concurrent.atomic.AtomicBoolean(false);
@@ -420,6 +435,7 @@ public class MainController {
         initTopicConfigNamesList();  // Initialize click-to-copy for topic configs
         initOffsetTable();  // Initialize partition offset table
         startMetricsTicker();
+        startConsoleFlushScheduler();  // Start batched console logging
         loadBrokerConfigs();
         // Pre-load all pod states into memory from last saved config (no UI changes)
         podStateMap.putAll(configManager.loadPodStatesFromDisk());
@@ -1762,12 +1778,40 @@ public class MainController {
         final String peekKeyDeser = sourceKeyDeserializerField.getText();
         final String peekValDeser = searchValueDeserializerField.getText();
         final String peekFilter = buildSearchFilter();
+        final String peekTopic = topic.trim();
         new Thread(() -> {
             try {
                 KafkaSearchService.PeekResult result = searchService.peekOne(
-                        bootstrapServers, topic.trim(),
+                        bootstrapServers, peekTopic,
                         peekKeyDeser, peekValDeser,
                         finalPartition, finalOffset, ff, ft, peekFilter);
+
+                // Extract partition/offset from result and store in memory immediately
+                Integer peekResultPartition = null;
+                Long peekResultOffset = null;
+                if (result.isSuccess() && result.getData() != null) {
+                    // Parse partition and offset from the JSON result
+                    Map<?, ?> parsed = parsePartitionOffsetFromJson(result.getData());
+                    if (parsed != null) {
+                        peekResultPartition = (Integer) parsed.get("partition");
+                        peekResultOffset = (Long) parsed.get("offset");
+                    }
+                    // Store message template
+                    if (result.getMessageJson() != null) {
+                        lastSearchMessageTemplate.set(result.getMessageJson());
+                    }
+                }
+
+                // Store in memory immediately in background thread
+                if (peekResultPartition != null && peekResultOffset != null) {
+                    lastSearchPartitionOffsets.clear();
+                    lastSearchPartitionOffsets.put(peekResultPartition, peekResultOffset);
+                    lastSearchTopic = peekTopic;
+                    appendToConsole("[Peek] Partition offset captured: partition=" + peekResultPartition + ", offset=" + peekResultOffset);
+                }
+
+                final Integer finalPeekPartition = peekResultPartition;
+                final Long finalPeekOffset = peekResultOffset;
                 Platform.runLater(() -> {
                     if (result.isSuccess()) {
                         ensureSearchResultsVisible();
@@ -1775,6 +1819,13 @@ public class MainController {
                         searchStatusLabel.setText("\u2713 1 message found | " + result.getStatus());
                         if (result.getMessageJson() != null) {
                             pushMessageTemplateArea.setText(result.getMessageJson());
+                        }
+                        // Also update verify offsets if we got a partition/offset
+                        if (finalPeekPartition != null && finalPeekOffset != null) {
+                            verifyPartitionOffsetsArea.setText(finalPeekPartition + "=" + (finalPeekOffset + 1));
+                            if (verifyTopicComboBox.getValue() == null || verifyTopicComboBox.getValue().isEmpty()) {
+                                verifyTopicComboBox.setValue(peekTopic);
+                            }
                         }
                     } else {
                         searchStatusLabel.setText("\u2717 " + result.getStatus());
@@ -1784,6 +1835,30 @@ public class MainController {
                 setSearchInProgress(false);
             }
         }).start();
+    }
+
+    /**
+     * Parses partition and offset from JSON result string.
+     * Returns map with "partition" (Integer) and "offset" (Long) or null.
+     */
+    private Map<String, Object> parsePartitionOffsetFromJson(String json) {
+        if (json == null || json.isEmpty()) return null;
+        try {
+            com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+            Map<?, ?> map = mapper.readValue(json, Map.class);
+            Map<String, Object> result = new HashMap<>();
+            Object partition = map.get("partition");
+            Object offset = map.get("offset");
+            if (partition instanceof Number) {
+                result.put("partition", ((Number) partition).intValue());
+            }
+            if (offset instanceof Number) {
+                result.put("offset", ((Number) offset).longValue());
+            }
+            return result.isEmpty() ? null : result;
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     @FXML
@@ -1848,8 +1923,41 @@ public class MainController {
                 final List<String> messages = result.isSuccess() ? result.getResults() : null;
                 final String resultError = result.isSuccess() ? null : result.getError();
                 final int resultCount = messages != null ? messages.size() : 0;
+                // Capture partition offsets and first message JSON before releasing result
+                final Map<Integer, Long> partitionOffsets = result.isSuccess() ? result.getPartitionOffsets() : null;
+                final String firstMessageJson = (messages != null && !messages.isEmpty()) ? messages.get(0) : null;
+                final String extractedValue = extractValueFromJson(firstMessageJson);
+
+                // Store in memory IMMEDIATELY in background thread (before UI update)
+                if (partitionOffsets != null && !partitionOffsets.isEmpty()) {
+                    lastSearchPartitionOffsets.clear();
+                    lastSearchPartitionOffsets.putAll(partitionOffsets);
+                    lastSearchTopic = resultTopic;
+                    appendToConsole("[Search] Partition offsets captured: " + partitionOffsets.size() + " partition(s)");
+                }
+                if (extractedValue != null) {
+                    lastSearchMessageTemplate.set(extractedValue);
+                }
+
                 result = null; // release SearchResult + its internal deque immediately; GC before runLater executes
                 Platform.runLater(() -> {
+                    // Push first message to template area
+                    if (extractedValue != null) {
+                        pushMessageTemplateArea.setText(extractedValue);
+                    }
+                    // Push partition offsets to verify offsets area
+                    if (partitionOffsets != null && !partitionOffsets.isEmpty()) {
+                        StringBuilder sb = new StringBuilder();
+                        partitionOffsets.entrySet().stream()
+                                .sorted(Map.Entry.comparingByKey())
+                                .forEach(e -> sb.append(e.getKey()).append("=").append(e.getValue() + 1).append("\n"));
+                        verifyPartitionOffsetsArea.setText(sb.toString().trim());
+                        // Also set the verify topic if not already set
+                        if (verifyTopicComboBox.getValue() == null || verifyTopicComboBox.getValue().isEmpty()) {
+                            verifyTopicComboBox.setValue(resultTopic);
+                        }
+                    }
+
                     String sep = "\n" + "-".repeat(80) + "\n";
                     String meta = "Bootstrap : " + resultBroker + "\n"
                             + "Pod       : " + getCurrentPodName() + "\n"
@@ -1881,6 +1989,25 @@ public class MainController {
                 setSearchInProgress(false);
             }
         }).start();
+    }
+
+    /**
+     * Extracts the value field from a JSON message string.
+     */
+    private String extractValueFromJson(String json) {
+        if (json == null || json.isEmpty()) return null;
+        try {
+            com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+            Map<?, ?> map = mapper.readValue(json, Map.class);
+            Object value = map.get("value");
+            if (value instanceof String) {
+                return (String) value;
+            }
+            // If value is a complex object, pretty-print it
+            return mapper.writerWithDefaultPrettyPrinter().writeValueAsString(value);
+        } catch (Exception e) {
+            return json; // Return original if parsing fails
+        }
     }
 
     @FXML
@@ -2311,6 +2438,9 @@ public class MainController {
 
         // Delete all consumer group cache files
         deleteAllCgCacheFiles();
+
+        // Stop console flush scheduler
+        stopConsoleFlushScheduler();
 
         appendToConsole("[Close] Application closed");
 
@@ -3304,17 +3434,115 @@ public class MainController {
 
     // ========== UTILITY ==========
 
+    /**
+     * Batched console logging: Adds message to queue, flushed periodically.
+     * Prevents UI freezing when processing large numbers of messages.
+     */
     private void appendToConsole(String message) {
         String podName = getCurrentPodName();
         String timestamp = java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
         String prefix = "[" + timestamp + "] [" + podName + "] ";
-        Platform.runLater(() -> consoleOutput.appendText(prefix + message + "\n"));
+        consoleLogQueue.offer(prefix + message + "\n");
+
+        // Trigger flush if queue is getting large
+        if (consoleLogQueue.size() >= CONSOLE_BATCH_SIZE) {
+            flushConsoleQueue();
+        }
     }
 
+    /**
+     * Batched console logging with explicit pod name.
+     */
     private void appendToConsole(String podName, String message) {
         String timestamp = java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
         String prefix = "[" + timestamp + "] [" + podName + "] ";
-        Platform.runLater(() -> consoleOutput.appendText(prefix + message + "\n"));
+        consoleLogQueue.offer(prefix + message + "\n");
+
+        // Trigger flush if queue is getting large
+        if (consoleLogQueue.size() >= CONSOLE_BATCH_SIZE) {
+            flushConsoleQueue();
+        }
+    }
+
+    /**
+     * Flushes the console log queue to the UI in a single Platform.runLater() call.
+     * Auto-clears console when it exceeds CONSOLE_MAX_LINES threshold.
+     */
+    private void flushConsoleQueue() {
+        if (!consoleAutoFlushEnabled || consoleFlushInProgress.getAndSet(true)) {
+            return; // Already flushing or disabled
+        }
+
+        // Drain queue and build batch
+        StringBuilder batch = new StringBuilder();
+        int count = 0;
+        String line;
+        while ((line = consoleLogQueue.poll()) != null && count < CONSOLE_BATCH_SIZE * 2) {
+            batch.append(line);
+            count++;
+        }
+
+        if (count == 0) {
+            consoleFlushInProgress.set(false);
+            return;
+        }
+
+        String batchText = batch.toString();
+        Platform.runLater(() -> {
+            try {
+                // Check if we need to auto-clear
+                int currentLines = consoleOutput.getText().split("\n", -1).length;
+                if (currentLines > CONSOLE_MAX_LINES) {
+                    // Keep last 1000 lines
+                    String text = consoleOutput.getText();
+                    int lastNewline = text.lastIndexOf('\n', text.length() - 1000);
+                    if (lastNewline > 0) {
+                        consoleOutput.setText("--- Log auto-cleared (retained last 1000 lines) ---\n" + text.substring(lastNewline + 1));
+                    } else {
+                        consoleOutput.clear();
+                        consoleOutput.setText("--- Log auto-cleared ---\n");
+                    }
+                }
+                consoleOutput.appendText(batchText);
+            } finally {
+                consoleFlushInProgress.set(false);
+            }
+        });
+    }
+
+    /**
+     * Starts the background console flush scheduler.
+     * Call this during initialization.
+     */
+    private void startConsoleFlushScheduler() {
+        if (consoleFlushScheduler != null && !consoleFlushScheduler.isShutdown()) {
+            return;
+        }
+        consoleFlushScheduler = Executors.newSingleThreadScheduledExecutor(r -> {
+            Thread t = new Thread(r, "console-flush");
+            t.setDaemon(true);
+            return t;
+        });
+        consoleFlushScheduler.scheduleAtFixedRate(this::flushConsoleQueue, CONSOLE_FLUSH_INTERVAL_MS, CONSOLE_FLUSH_INTERVAL_MS, java.util.concurrent.TimeUnit.MILLISECONDS);
+    }
+
+    /**
+     * Stops the background console flush scheduler.
+     * Call this during shutdown.
+     */
+    private void stopConsoleFlushScheduler() {
+        if (consoleFlushScheduler != null) {
+            consoleFlushScheduler.shutdown();
+            try {
+                if (!consoleFlushScheduler.awaitTermination(1, java.util.concurrent.TimeUnit.SECONDS)) {
+                    consoleFlushScheduler.shutdownNow();
+                }
+            } catch (InterruptedException e) {
+                consoleFlushScheduler.shutdownNow();
+            }
+        }
+        // Final flush of any remaining messages
+        flushConsoleQueue();
     }
 
     private String getBootstrapServers() {
@@ -3505,6 +3733,36 @@ public class MainController {
     @FXML
     private void handleClearVerifyOffsets() {
         verifyPartitionOffsetsArea.clear();
+    }
+
+    @FXML
+    private void handleApplyCapturedOffsets() {
+        // Apply offsets stored in memory (useful when UI was stuck during search/peek)
+        if (lastSearchPartitionOffsets.isEmpty()) {
+            verifyStatusLabel.setText("⚠ No captured offsets available");
+            appendToConsole("[ApplyOffsets] No offsets in memory — run a search or peek first");
+            return;
+        }
+
+        StringBuilder sb = new StringBuilder();
+        lastSearchPartitionOffsets.entrySet().stream()
+                .sorted(Map.Entry.comparingByKey())
+                .forEach(e -> sb.append(e.getKey()).append("=").append(e.getValue() + 1).append("\n"));
+        verifyPartitionOffsetsArea.setText(sb.toString().trim());
+
+        // Also set topic if available
+        if (lastSearchTopic != null && (verifyTopicComboBox.getValue() == null || verifyTopicComboBox.getValue().isEmpty())) {
+            verifyTopicComboBox.setValue(lastSearchTopic);
+        }
+
+        // Apply message template if available
+        String template = lastSearchMessageTemplate.get();
+        if (template != null && !template.isEmpty()) {
+            pushMessageTemplateArea.setText(template);
+        }
+
+        verifyStatusLabel.setText("\u2713 Applied " + lastSearchPartitionOffsets.size() + " captured offset(s)");
+        appendToConsole("[ApplyOffsets] Applied " + lastSearchPartitionOffsets.size() + " partition offset(s) from memory");
     }
 
     @FXML

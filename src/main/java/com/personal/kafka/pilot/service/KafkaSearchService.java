@@ -136,28 +136,64 @@ public class KafkaSearchService {
     }
 
     private PeekResult formatPeekResult(ConsumerRecord<String, Object> rec, int partition, Long offset) {
-        String json = (rec.value() instanceof String) ? (String) rec.value() : convertProtobufToJson(rec.value());
-        if (json == null) json = formatValue(rec.value());
+        String messageValue = (rec.value() instanceof String) ? (String) rec.value() : convertProtobufToJson(rec.value());
+        if (messageValue == null) messageValue = formatValue(rec.value());
 
         String ts = LocalDateTime.ofInstant(
                 Instant.ofEpochMilli(rec.timestamp()), ZoneId.systemDefault()).format(DISPLAY_FORMAT);
 
         String headers = formatHeaders(rec.headers());
 
-        StringBuilder body = new StringBuilder();
-        body.append("=== Message Details ===\n");
-        body.append("Timestamp: ").append(ts).append("\n");
-        body.append("Partition: ").append(rec.partition()).append("\n");
-        body.append("Offset: ").append(rec.offset()).append("\n");
-        body.append("Key: ").append(rec.key() != null ? rec.key() : "null").append("\n");
-        if (!headers.isEmpty()) {
-            body.append("Headers: ").append(headers).append("\n");
+        // Build JSON object for the result
+        Map<String, Object> resultMap = new LinkedHashMap<>();
+        resultMap.put("timestamp", ts);
+        resultMap.put("timestampEpochMs", rec.timestamp());
+        resultMap.put("timestampType", rec.timestampType() != null ? rec.timestampType().name() : "UNKNOWN");
+        resultMap.put("partition", rec.partition());
+        resultMap.put("offset", rec.offset());
+        resultMap.put("key", rec.key());
+        resultMap.put("headers", headers.isEmpty() ? null : parseHeadersToMap(rec.headers()));
+        // Parse value as JSON object if possible, otherwise store as string
+        resultMap.put("value", parseValueToJson(messageValue));
+
+        String jsonOutput;
+        try {
+            jsonOutput = objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(resultMap);
+        } catch (Exception e) {
+            jsonOutput = "{\"error\": \"Failed to format as JSON\"}";
         }
-        body.append("\n=== Value ===\n").append(json);
 
         String status = "1 message from partition " + partition
                 + (offset != null ? " @ offset " + offset : " (latest)");
-        return PeekResult.success(body.toString(), status, json);
+        return PeekResult.success(jsonOutput, status, messageValue);
+    }
+
+    /**
+     * Parses a string value to JSON object/array if valid JSON, otherwise returns as-is.
+     */
+    private Object parseValueToJson(String value) {
+        if (value == null || value.trim().isEmpty()) {
+            return value;
+        }
+        try {
+            String trimmed = value.trim();
+            if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
+                return objectMapper.readValue(value, Object.class);
+            }
+        } catch (Exception e) {
+            // Not valid JSON, return as string
+        }
+        return value;
+    }
+
+    private Map<String, String> parseHeadersToMap(org.apache.kafka.common.header.Headers headers) {
+        Map<String, String> map = new LinkedHashMap<>();
+        if (headers != null) {
+            for (org.apache.kafka.common.header.Header h : headers) {
+                map.put(h.key(), h.value() != null ? new String(h.value()) : null);
+            }
+        }
+        return map;
     }
 
     private static final int BATCH_SIZE = 10;        // partitions per batch — controls peak memory
@@ -325,22 +361,29 @@ public class KafkaSearchService {
                                         if (valueStr == null) valueStr = formatValue(rec.value()); // lazy format
                                         safeLog.accept("[Search] Found match at partition "
                                                 + rec.partition() + ", offset " + rec.offset());
-                                        String ts = LocalDateTime.ofInstant(
-                                                Instant.ofEpochMilli(rec.timestamp()),
-                                                ZoneId.systemDefault()).format(DISPLAY_FORMAT);
-                                        String tsType = rec.timestampType() != null
-                                                ? rec.timestampType().name : "UNKNOWN";
-                                        String headers = formatHeaders(rec.headers());
-                                        StringBuilder sb = new StringBuilder();
-                                        sb.append("=== Message Details ===\n");
-                                        sb.append("Timestamp: ").append(ts).append("  [").append(tsType).append("]\n");
-                                        sb.append("Partition: ").append(rec.partition()).append("\n");
-                                        sb.append("Offset:    ").append(rec.offset()).append("\n");
-                                        sb.append("Key:       ").append(rec.key() != null ? rec.key() : "null").append("\n");
-                                        if (!headers.isEmpty()) sb.append("Headers:   ").append(headers).append("\n");
-                                        sb.append("\n=== Value ===\n").append(valueStr);
+
+                                        // Build JSON object for the result
+                                        Map<String, Object> resultMap = new LinkedHashMap<>();
+                                        resultMap.put("timestampEpochMs", rec.timestamp());
+                                        resultMap.put("timestampType", rec.timestampType() != null ? rec.timestampType().name() : "UNKNOWN");
+                                        resultMap.put("partition", rec.partition());
+                                        resultMap.put("offset", rec.offset());
+                                        resultMap.put("key", rec.key());
+
+                                        String headersStr = formatHeaders(rec.headers());
+                                        resultMap.put("headers", headersStr.isEmpty() ? null : parseHeadersToMap(rec.headers()));
+                                        // Parse value as JSON object if possible for proper formatting
+                                        resultMap.put("value", parseValueToJson(valueStr));
+
+                                        String jsonOutput;
+                                        try {
+                                            jsonOutput = objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(resultMap);
+                                        } catch (Exception e) {
+                                            jsonOutput = "{\"error\": \"Failed to format as JSON\"}";
+                                        }
+
                                         synchronized (resultLock) {
-                                            allResults.add(sb.toString());
+                                            allResults.add(jsonOutput);
                                             allTimestamps.add(new long[]{rec.timestamp()});
                                         }
                                     }
@@ -549,18 +592,50 @@ public class KafkaSearchService {
         private final boolean success;
         private final List<String> results;
         private final String error;
+        private final Map<Integer, Long> partitionOffsets; // partition -> max offset found
 
-        private SearchResult(boolean success, List<String> results, String error) {
+        private SearchResult(boolean success, List<String> results, String error, Map<Integer, Long> partitionOffsets) {
             this.success = success;
             this.results = results;
             this.error = error;
+            this.partitionOffsets = partitionOffsets != null ? partitionOffsets : new HashMap<>();
         }
 
-        public static SearchResult success(List<String> results) { return new SearchResult(true, results, null); }
-        public static SearchResult error(String message) { return new SearchResult(false, Collections.emptyList(), message); }
+        public static SearchResult success(List<String> results) {
+            return new SearchResult(true, results, null, extractPartitionOffsets(results));
+        }
+        public static SearchResult error(String message) { return new SearchResult(false, Collections.emptyList(), message, null); }
 
         public boolean isSuccess() { return success; }
         public List<String> getResults() { return results; }
         public String getError() { return error; }
+        public Map<Integer, Long> getPartitionOffsets() { return partitionOffsets; }
+
+        /**
+         * Extracts partition -> max offset mapping from JSON results.
+         * Format: partition=offset (one per line)
+         */
+        private static Map<Integer, Long> extractPartitionOffsets(List<String> results) {
+            Map<Integer, Long> offsets = new HashMap<>();
+            if (results == null || results.isEmpty()) return offsets;
+
+            for (String json : results) {
+                try {
+                    Map<?, ?> map = objectMapper.readValue(json, Map.class);
+                    Object partitionObj = map.get("partition");
+                    Object offsetObj = map.get("offset");
+                    if (partitionObj instanceof Number && offsetObj instanceof Number) {
+                        int partition = ((Number) partitionObj).intValue();
+                        long offset = ((Number) offsetObj).longValue();
+                        // Keep the maximum offset per partition
+                        offsets.merge(partition, offset, Math::max);
+                    }
+                } catch (Exception e) {
+                    // Skip malformed results
+                    logger.warn("Failed to extract offset from result: {}", e.getMessage());
+                }
+            }
+            return offsets;
+        }
     }
 }

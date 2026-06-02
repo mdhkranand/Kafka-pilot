@@ -1,5 +1,6 @@
 package com.personal.kafka.pilot.service;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
@@ -17,6 +18,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
@@ -37,6 +39,7 @@ public class KafkaTailService {
     private static final long MAX_DURATION_MS = 5 * 60 * 1000L; // 5 minutes
     private static final long POLL_INTERVAL_MS = 5_000L;
     private static final Duration POLL_TIMEOUT = Duration.ofMillis(2000);
+    private static final ObjectMapper objectMapper = new ObjectMapper();
 
     private volatile ClassLoader customClassLoader;
 
@@ -190,17 +193,51 @@ public class KafkaTailService {
 
     private String formatRecord(RecordEntry e) {
         ConsumerRecord<String, Object> rec = e.rec;
-        String ts = LocalDateTime.ofInstant(Instant.ofEpochMilli(rec.timestamp()),
-                ZoneId.systemDefault()).format(DISPLAY_FORMAT);
-        String tsType = rec.timestampType() != null ? rec.timestampType().name : "UNKNOWN";
-        StringBuilder sb = new StringBuilder();
-        sb.append("=== Message Details ===\n");
-        sb.append("Timestamp: ").append(ts).append("  [").append(tsType).append("]\n");
-        sb.append("Partition: ").append(rec.partition()).append("\n");
-        sb.append("Offset:    ").append(rec.offset()).append("\n");
-        sb.append("Key:       ").append(rec.key() != null ? rec.key() : "null").append("\n");
-        sb.append("\n=== Value ===\n").append(e.valueStr);
-        return sb.toString();
+
+        // Build JSON object for the result
+        Map<String, Object> resultMap = new LinkedHashMap<>();
+        resultMap.put("timestampEpochMs", rec.timestamp());
+        resultMap.put("timestampType", rec.timestampType() != null ? rec.timestampType().name() : "UNKNOWN");
+        resultMap.put("partition", rec.partition());
+        resultMap.put("offset", rec.offset());
+        resultMap.put("key", rec.key());
+        resultMap.put("headers", parseHeadersToMap(rec.headers()));
+        // Parse value as JSON object if possible for proper formatting
+        resultMap.put("value", parseValueToJson(e.valueStr));
+
+        try {
+            return objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(resultMap);
+        } catch (Exception ex) {
+            return "{\"error\": \"Failed to format as JSON\"}";
+        }
+    }
+
+    /**
+     * Parses a string value to JSON object/array if valid JSON, otherwise returns as-is.
+     */
+    private Object parseValueToJson(String value) {
+        if (value == null || value.trim().isEmpty()) {
+            return value;
+        }
+        try {
+            String trimmed = value.trim();
+            if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
+                return objectMapper.readValue(value, Object.class);
+            }
+        } catch (Exception e) {
+            // Not valid JSON, return as string
+        }
+        return value;
+    }
+
+    private Map<String, String> parseHeadersToMap(org.apache.kafka.common.header.Headers headers) {
+        Map<String, String> map = new LinkedHashMap<>();
+        if (headers != null) {
+            for (org.apache.kafka.common.header.Header h : headers) {
+                map.put(h.key(), h.value() != null ? new String(h.value()) : null);
+            }
+        }
+        return map.isEmpty() ? null : map;
     }
 
     private String formatValue(Object value) {
