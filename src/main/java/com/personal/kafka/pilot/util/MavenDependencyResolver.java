@@ -134,6 +134,16 @@ public class MavenDependencyResolver {
         return session;
     }
     
+    public void setCustomRepository(String repoUrl) {
+        if (repoUrl == null || repoUrl.trim().isEmpty()) {
+            return;
+        }
+        String trimmed = repoUrl.trim();
+        repositories.removeIf(r -> r.getId().equals("custom"));
+        repositories.add(0, new RemoteRepository.Builder("custom", "default", trimmed).build());
+        logger.info("Custom Maven repository set: {}", trimmed);
+    }
+
     private List<RemoteRepository> createRepositories() {
         List<RemoteRepository> repos = new ArrayList<>();
         

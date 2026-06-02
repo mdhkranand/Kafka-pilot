@@ -34,11 +34,13 @@ import org.apache.kafka.common.TopicPartition;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.awt.Desktop;
 import java.io.File;
 import java.lang.management.GarbageCollectorMXBean;
 import java.lang.management.ManagementFactory;
 import java.lang.management.MemoryUsage;
 import java.lang.management.ThreadMXBean;
+import java.net.URI;
 import java.net.URLClassLoader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -124,6 +126,7 @@ public class MainController {
     @FXML private Button deleteBrokerButton;
     @FXML private Button connectButton;
     @FXML private TextField mavenDependencyField;
+    @FXML private TextField mavenRepoUrlField;
     @FXML private TextArea consoleOutput;
     @FXML private Button toggleConsoleButton;
     @FXML private VBox pushConsoleBox;
@@ -2875,6 +2878,11 @@ public class MainController {
         appendToConsole("[Download] Starting...");
         new Thread(() -> {
             try {
+                String repoUrl = mavenRepoUrlField.getText();
+                if (repoUrl != null && !repoUrl.trim().isEmpty()) {
+                    mavenResolver.setCustomRepository(repoUrl.trim());
+                    appendToConsole("[Download] Using repo: " + repoUrl.trim());
+                }
                 // Support comma-separated dependencies
                 List<MavenDependencyResolver.MavenDependency> deps = parseMavenDependencies(dependency);
                 appendToConsole("[Download] Resolving " + deps.size() + " dependencies...");
@@ -2900,6 +2908,60 @@ public class MainController {
                 });
             }
         }).start();
+    }
+
+    @FXML
+    private void handleOpenMavenRepo() {
+        String dependency = mavenDependencyField.getText();
+        String customRepoUrl = mavenRepoUrlField.getText();
+        String url;
+
+        // If custom Maven Repo URL is provided, use it
+        if (customRepoUrl != null && !customRepoUrl.trim().isEmpty()) {
+            String repoUrl = customRepoUrl.trim();
+            if (dependency != null && !dependency.trim().isEmpty()) {
+                String first = dependency.split(",")[0].trim();
+                String[] parts = first.split(":");
+                if (parts.length >= 2) {
+                    // Construct artifact URL in standard Maven repo format
+                    String groupPath = parts[0].trim().replace(".", "/");
+                    String artifactId = parts[1].trim();
+                    String version = parts.length >= 3 ? parts[2].trim() : "";
+                    if (!version.isEmpty()) {
+                        url = repoUrl + (repoUrl.endsWith("/") ? "" : "/") + groupPath + "/" + artifactId + "/" + version + "/";
+                    } else {
+                        url = repoUrl + (repoUrl.endsWith("/") ? "" : "/") + groupPath + "/" + artifactId + "/";
+                    }
+                } else {
+                    url = repoUrl;
+                }
+            } else {
+                url = repoUrl;
+            }
+            appendToConsole("[Maven Repo] Opening custom repository: " + url);
+        } else {
+            // Use default mvnrepository.com
+            if (dependency != null && !dependency.trim().isEmpty()) {
+                String first = dependency.split(",")[0].trim();
+                String[] parts = first.split(":");
+                if (parts.length >= 2) {
+                    url = "https://mvnrepository.com/artifact/" + parts[0].trim() + "/" + parts[1].trim()
+                            + (parts.length >= 3 ? "/" + parts[2].trim() : "");
+                } else {
+                    url = "https://mvnrepository.com/search?q=" + first.replace(" ", "+");
+                }
+            } else {
+                url = "https://mvnrepository.com/";
+            }
+            appendToConsole("[Maven Repo] Opening: " + url);
+        }
+
+        try {
+            Desktop.getDesktop().browse(new URI(url));
+        } catch (Exception e) {
+            logger.error("Failed to open Maven repo URL", e);
+            Platform.runLater(() -> showErrorAlert("Browser Error", "Could not open: " + url));
+        }
     }
 
     /**
@@ -3013,6 +3075,7 @@ public class MainController {
         }
         // Maven dependency is global (common for all pods)
         config.setMavenDependency(mavenDependencyField.getText());
+        config.setMavenRepoUrl(mavenRepoUrlField.getText());
 
         // Save current pod state before saving configuration
         if (currentPodName != null && !currentPodName.isEmpty()) {
@@ -3062,6 +3125,7 @@ public class MainController {
         config.setValueSerializerClass(valueSerializer);
         config.setProtobufClassName(protobufClassNameField.getText());
         config.setMavenDependency(mavenDependencyField.getText());
+        config.setMavenRepoUrl(mavenRepoUrlField.getText());
         config.setAutoIncrementFields(parseAutoIncrementFields(autoIncrementFieldsField.getText()));
         config.setRotationFields(parseRotationFields(rotationFieldsField.getText()));
         config.setUuidFields(parseUuidFields(uuidFieldsField.getText()));
@@ -3137,6 +3201,7 @@ public class MainController {
         // Global settings
         // Maven dependency is global (common for all pods)
         if (config.getMavenDependency() != null) mavenDependencyField.setText(config.getMavenDependency());
+        if (config.getMavenRepoUrl() != null) mavenRepoUrlField.setText(config.getMavenRepoUrl());
 
         // Load all pod states
         if (config.getPodStates() != null) {

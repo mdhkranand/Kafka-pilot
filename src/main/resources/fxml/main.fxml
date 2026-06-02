@@ -153,10 +153,19 @@
                             styleClass="btn-blue" style="-fx-font-size: 12px;"/>
                 </HBox>
 
-                <!-- Row 5: Configuration -->
-                <Label text="Configuration:" GridPane.rowIndex="5" GridPane.columnIndex="0"
+                <!-- Row 5: Maven Repo URL -->
+                <Label text="Maven Repo URL:" GridPane.rowIndex="5" GridPane.columnIndex="0"
                        style="-fx-text-fill: #ecf0f1; -fx-font-weight: bold; -fx-font-size: 12px;"/>
                 <HBox spacing="10" alignment="CENTER_LEFT" GridPane.rowIndex="5" GridPane.columnIndex="1">
+                    <TextField fx:id="mavenRepoUrlField"
+                               promptText="https://your-repo/maven2/ (optional, leave blank for Maven Central)"
+                               HBox.hgrow="ALWAYS"/>
+                </HBox>
+
+                <!-- Row 6: Configuration -->
+                <Label text="Configuration:" GridPane.rowIndex="6" GridPane.columnIndex="0"
+                       style="-fx-text-fill: #ecf0f1; -fx-font-weight: bold; -fx-font-size: 12px;"/>
+                <HBox spacing="10" alignment="CENTER_LEFT" GridPane.rowIndex="6" GridPane.columnIndex="1">
                     <ComboBox fx:id="configsCombo" promptText="Select saved config" prefWidth="200"/>
                     <Button text="Load" onAction="#handleLoadConfig"/>
                     <Button text="Save" onAction="#handleSaveConfig"/>

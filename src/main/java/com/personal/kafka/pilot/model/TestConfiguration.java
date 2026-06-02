@@ -60,6 +60,8 @@ public class TestConfiguration {
     private String customJarPath;
     
     private String mavenDependency;
+
+    private String mavenRepoUrl;
     
     private Map<String, String> messageHeaders;
 
