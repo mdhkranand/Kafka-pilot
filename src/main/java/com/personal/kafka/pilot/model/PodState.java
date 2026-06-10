@@ -37,8 +37,9 @@ public class PodState {
     private String searchToMinute;
     private String searchMaxResults;
     private String searchValueDeserializer;
+    private String searchFlatbufClassName;
+    private boolean decodeAsFlatbuf;
     private String sourceKeyDeserializer;
-
     // Push Tab Fields
     private String sourceTopic;
     private String sourcePartition;
@@ -51,6 +52,8 @@ public class PodState {
     private String keySerializer;
     private String valueSerializer;
     private String protobufClassName;
+    private String pushFlatbufClassName;
+    private boolean pushFlatbufMode;
     private String messageHeaders;
     private String autoIncrementFields;
     private String rotationFields;

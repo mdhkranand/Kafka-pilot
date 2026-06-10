@@ -104,6 +104,17 @@
             <scope>provided</scope>
         </dependency>
         
+        <!-- FlatBuffers support (optional, for custom serializers).
+             Pinned to davidmoten 1.9.0.1 — the same flatbuffers-java version CloudView's
+             cloudview-alert-utility generates its dto classes against. Those generated classes
+             call com.google.flatbuffers.FlatBufferBuilder.startObject(int), which was renamed to
+             startTable(int) in flatbuffers >= 1.10, so a newer version causes NoSuchMethodError. -->
+        <dependency>
+            <groupId>com.github.davidmoten</groupId>
+            <artifactId>flatbuffers-java</artifactId>
+            <version>1.9.0.1</version>
+        </dependency>
+
         <!-- Protobuf support (optional, for custom serializers) -->
         <dependency>
             <groupId>com.google.protobuf</groupId>

@@ -44,7 +44,11 @@ public class TestConfiguration {
     private String valueSerializerClass;
     
     private String protobufClassName;
-    
+
+    private String flatbufClassName;
+
+    private boolean flatbufMode;
+
     private List<FieldConfig> autoIncrementFields;
     
     private List<FieldConfig> rotationFields;
@@ -79,7 +83,6 @@ public class TestConfiguration {
     private Integer searchPartition;
     private String searchFromTime;
     private String searchToTime;
-
     // String representations for easy editing
     private String autoIncrementFieldsString;
     private String rotationFieldsString;

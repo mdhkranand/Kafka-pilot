@@ -130,34 +130,41 @@ public class KafkaLoadTestEngine<K, V> {
                 producerProperties.putAll(config.getAdditionalKafkaProperties());
             }
             
-            // Manually instantiate serializers with custom classloader
-            org.apache.kafka.common.serialization.Serializer<K> keySerializer;
-            org.apache.kafka.common.serialization.Serializer<V> valueSerializer;
-            
-            if (customClassLoader != null) {
-                Thread.currentThread().setContextClassLoader(customClassLoader);
-                Class<?> keySerializerClass = Class.forName(
-                    config.getKeySerializerClass() != null ? config.getKeySerializerClass() : StringSerializer.class.getName(),
-                    true, customClassLoader);
-                keySerializer = (org.apache.kafka.common.serialization.Serializer<K>) keySerializerClass.getDeclaredConstructor().newInstance();
+            // Resolve serializer class names
+            String keySerializerClassName = config.getKeySerializerClass() != null
+                    ? config.getKeySerializerClass() : StringSerializer.class.getName();
+            String valueSerializerClassName = config.getValueSerializerClass() != null
+                    ? config.getValueSerializerClass() : StringSerializer.class.getName();
+
+            // Always instantiate serializers explicitly when flatbufMode is on, or when a
+            // custom classloader is present.  Using class-name-in-properties causes Kafka's
+            // internal type checker to reject byte[] values when the producer generic type
+            // is inferred as String.
+            if (config.isFlatbufMode() || customClassLoader != null) {
+                ClassLoader loader = customClassLoader != null
+                        ? customClassLoader : Thread.currentThread().getContextClassLoader();
+                if (customClassLoader != null) Thread.currentThread().setContextClassLoader(customClassLoader);
+
+                Class<?> keySerializerClass = Class.forName(keySerializerClassName, true, loader);
+                org.apache.kafka.common.serialization.Serializer<K> keySerializer =
+                        (org.apache.kafka.common.serialization.Serializer<K>) keySerializerClass.getDeclaredConstructor().newInstance();
                 java.util.Map<String, Object> configMap = new java.util.HashMap<>();
                 producerProperties.forEach((k, v) -> configMap.put((String) k, v));
                 keySerializer.configure(configMap, true);
-                Class<?> valueSerializerClass = Class.forName(
-                    config.getValueSerializerClass() != null ? config.getValueSerializerClass() : StringSerializer.class.getName(),
-                    true, customClassLoader);
-                valueSerializer = (org.apache.kafka.common.serialization.Serializer<V>) valueSerializerClass.getDeclaredConstructor().newInstance();
+
+                Class<?> valueSerializerClass = Class.forName(valueSerializerClassName, true, loader);
+                org.apache.kafka.common.serialization.Serializer<V> valueSerializer =
+                        (org.apache.kafka.common.serialization.Serializer<V>) valueSerializerClass.getDeclaredConstructor().newInstance();
                 valueSerializer.configure(configMap, false);
+
                 log("Key Serializer: " + keySerializerClass.getName());
                 log("Value Serializer: " + valueSerializerClass.getName());
                 producer = new KafkaProducer<>(producerProperties, keySerializer, valueSerializer);
             } else {
-                producerProperties.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG,
-                    config.getKeySerializerClass() != null ? config.getKeySerializerClass() : StringSerializer.class.getName());
-                producerProperties.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG,
-                    config.getValueSerializerClass() != null ? config.getValueSerializerClass() : StringSerializer.class.getName());
-                log("Key Serializer: " + producerProperties.get(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG));
-                log("Value Serializer: " + producerProperties.get(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG));
+                producerProperties.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, keySerializerClassName);
+                producerProperties.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, valueSerializerClassName);
+                log("Key Serializer: " + keySerializerClassName);
+                log("Value Serializer: " + valueSerializerClassName);
                 producer = new KafkaProducer<>(producerProperties);
             }
             log("Kafka producer initialized successfully");
@@ -181,6 +188,18 @@ public class KafkaLoadTestEngine<K, V> {
             messages.add(message);
             keys.add(resolveKeyFromJson(messageJson));
 
+            if (i == 0 && config.isFlatbufMode()) {
+                if (message instanceof byte[]) {
+                    byte[] b = (byte[]) message;
+                    StringBuilder head = new StringBuilder();
+                    for (int j = 0; j < Math.min(b.length, 16); j++) head.append(String.format("%02x ", b[j]));
+                    log("First message value type: byte[] (" + b.length + " bytes), head: " + head.toString().trim());
+                } else {
+                    log("First message value type: " + (message == null ? "null" : message.getClass().getName())
+                            + " — NOTE: not byte[]; FlatBuffer/byte serialization is NOT active.");
+                }
+            }
+
             Map<String, String> resolved = new LinkedHashMap<>();
             if (configuredHeaders != null) {
                 for (Map.Entry<String, String> entry : configuredHeaders.entrySet()) {
@@ -202,8 +221,11 @@ public class KafkaLoadTestEngine<K, V> {
     private K resolveKeyFromJson(String messageJson) {
         String keyType = config.getMessageKeyType();
         if (keyType == null || keyType.equals("none")) return null;
-        if (keyType.equals("hardcoded")) return (K) config.getMessageKeyHardcoded();
-        if (keyType.equals("field")) {
+
+        String keyStr = null;
+        if (keyType.equals("hardcoded")) {
+            keyStr = config.getMessageKeyHardcoded();
+        } else if (keyType.equals("field")) {
             String fieldPath = config.getMessageKeyField();
             if (fieldPath == null || fieldPath.trim().isEmpty()) return null;
             try {
@@ -213,16 +235,22 @@ public class KafkaLoadTestEngine<K, V> {
                     if (node == null || !node.has(part)) { node = null; break; }
                     node = node.get(part);
                 }
-                if (node != null && !node.isNull() && node.isValueNode()) return (K) node.asText();
+                if (node != null && !node.isNull() && node.isValueNode()) keyStr = node.asText();
             } catch (Exception e) {
                 logger.warn("Could not resolve key field '{}' from message JSON: {}", fieldPath, e.getMessage());
             }
-            return null;
+        } else {
+            String keyConfig = config.getMessageKeyField();
+            if (keyConfig == null || keyConfig.trim().isEmpty()) return null;
+            keyStr = keyConfig.trim();
         }
-        // fallback: try field path directly
-        String keyConfig = config.getMessageKeyField();
-        if (keyConfig == null || keyConfig.trim().isEmpty()) return null;
-        return (K) keyConfig.trim();
+
+        if (keyStr == null) return null;
+        // When flatbuf mode is active the producer uses ByteArraySerializer — key must be byte[]
+        if (config.isFlatbufMode()) {
+            return (K) keyStr.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        }
+        return (K) keyStr;
     }
 
     

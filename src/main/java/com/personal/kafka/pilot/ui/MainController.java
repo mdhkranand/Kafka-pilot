@@ -170,6 +170,8 @@ public class MainController {
     @FXML private Spinner<Integer> searchToMinuteSpinner;
     @FXML private TextField searchMaxResults;
     @FXML private TextField searchValueDeserializerField;
+    @FXML private CheckBox decodeAsFlatbufCheck;
+    @FXML private TextField searchFlatbufClassNameField;
     @FXML private TextField sourceKeyDeserializerField;
     @FXML private TextArea searchResultsArea;
     @FXML private Label searchStatusLabel;
@@ -199,6 +201,8 @@ public class MainController {
     @FXML private TextField keySerializerField;
     @FXML private TextField valueSerializerField;
     @FXML private TextField protobufClassNameField;
+    @FXML private TextField pushFlatbufClassNameField;
+    @FXML private CheckBox pushFlatbufModeCheck;
     @FXML private TextField messageHeadersField;
     @FXML private TextField autoIncrementFieldsField;
     @FXML private TextField rotationFieldsField;
@@ -487,6 +491,33 @@ public class MainController {
         });
         searchNoTimeRange.selectedProperty().addListener((obs, o, nv) -> updateFromBeginningVisibility());
         sourceOffsetField.textProperty().addListener((obs, o, nv) -> updateFromBeginningVisibility());
+
+        decodeAsFlatbufCheck.selectedProperty().addListener((obs, o, flatbuf) -> {
+            searchTextFilter.setDisable(flatbuf);
+            searchTextFilter2.setDisable(flatbuf);
+            searchOperatorCombo.setDisable(flatbuf);
+            // Partition & offset stay usable in FlatBuffer mode — they are governed only by
+            // the "specific partition" selection, so the user can fetch a message at a given offset.
+            searchAllPartitions.setDisable(false);
+            searchSpecificPartition.setDisable(false);
+            searchPartitionField.setDisable(!searchSpecificPartition.isSelected());
+            offsetLabel.setDisable(!searchSpecificPartition.isSelected());
+            sourceOffsetField.setDisable(!searchSpecificPartition.isSelected());
+            searchNoTimeRange.setDisable(flatbuf);
+            searchWithTimeRange.setDisable(flatbuf);
+            searchFromTimeBox.setDisable(flatbuf || !searchWithTimeRange.isSelected());
+            searchToTimeBox.setDisable(flatbuf || !searchWithTimeRange.isSelected());
+            searchMaxResults.setDisable(flatbuf);
+            sourceKeyDeserializerField.setDisable(flatbuf);
+            searchValueDeserializerField.setDisable(flatbuf);
+            searchFromBeginningBox.setDisable(flatbuf);
+        });
+
+        pushFlatbufModeCheck.selectedProperty().addListener((obs, o, flatbuf) -> {
+            keySerializerField.setDisable(flatbuf);
+            valueSerializerField.setDisable(flatbuf);
+            protobufClassNameField.setDisable(flatbuf);
+        });
 
         searchOperatorCombo.getItems().addAll("AND", "OR");
         searchOperatorCombo.setValue("AND");
@@ -979,6 +1010,8 @@ public class MainController {
                 .searchToMinute(searchToMinuteSpinner.getValue() != null ? searchToMinuteSpinner.getValue().toString() : "0")
                 .searchMaxResults(searchMaxResults.getText())
                 .searchValueDeserializer(searchValueDeserializerField.getText())
+                .searchFlatbufClassName(searchFlatbufClassNameField.getText())
+                .decodeAsFlatbuf(decodeAsFlatbufCheck.isSelected())
                 .sourceKeyDeserializer(sourceKeyDeserializerField.getText())
                 // Push Tab
                 .sourceTopic(sourceTopicField.getText())
@@ -992,6 +1025,8 @@ public class MainController {
                 .keySerializer(keySerializerField.getText())
                 .valueSerializer(valueSerializerField.getText())
                 .protobufClassName(protobufClassNameField.getText())
+                .pushFlatbufClassName(pushFlatbufClassNameField.getText())
+                .pushFlatbufMode(pushFlatbufModeCheck.isSelected())
                 .messageHeaders(messageHeadersField.getText())
                 .autoIncrementFields(autoIncrementFieldsField.getText())
                 .rotationFields(rotationFieldsField.getText())
@@ -1062,6 +1097,8 @@ public class MainController {
         if (state.getSearchToMinute() != null) searchToMinuteSpinner.getValueFactory().setValue(Integer.parseInt(state.getSearchToMinute()));
         if (state.getSearchMaxResults() != null) searchMaxResults.setText(state.getSearchMaxResults());
         if (state.getSearchValueDeserializer() != null) searchValueDeserializerField.setText(state.getSearchValueDeserializer());
+        if (state.getSearchFlatbufClassName() != null) searchFlatbufClassNameField.setText(state.getSearchFlatbufClassName());
+        decodeAsFlatbufCheck.setSelected(state.isDecodeAsFlatbuf());
         if (state.getSourceKeyDeserializer() != null) sourceKeyDeserializerField.setText(state.getSourceKeyDeserializer());
 
         // Push Tab
@@ -1076,6 +1113,8 @@ public class MainController {
         if (state.getKeySerializer() != null) keySerializerField.setText(state.getKeySerializer());
         if (state.getValueSerializer() != null) valueSerializerField.setText(state.getValueSerializer());
         if (state.getProtobufClassName() != null) protobufClassNameField.setText(state.getProtobufClassName());
+        if (state.getPushFlatbufClassName() != null) pushFlatbufClassNameField.setText(state.getPushFlatbufClassName());
+        pushFlatbufModeCheck.setSelected(state.isPushFlatbufMode());
         if (state.getMessageHeaders() != null) messageHeadersField.setText(state.getMessageHeaders());
         if (state.getAutoIncrementFields() != null) autoIncrementFieldsField.setText(state.getAutoIncrementFields());
         if (state.getRotationFields() != null) rotationFieldsField.setText(state.getRotationFields());
@@ -1211,6 +1250,8 @@ public class MainController {
         searchToMinuteSpinner.getValueFactory().setValue(59);
         searchMaxResults.setText("100");
         searchValueDeserializerField.setText(DEFAULT_DESERIALIZER);
+        searchFlatbufClassNameField.clear();
+        decodeAsFlatbufCheck.setSelected(false);
         sourceKeyDeserializerField.setText(DEFAULT_DESERIALIZER);
 
         // Push Tab - clear to defaults
@@ -1225,6 +1266,8 @@ public class MainController {
         keySerializerField.setText(DEFAULT_SERIALIZER);
         valueSerializerField.setText(DEFAULT_SERIALIZER);
         protobufClassNameField.clear();
+        pushFlatbufClassNameField.clear();
+        pushFlatbufModeCheck.setSelected(false);
         messageHeadersField.clear();
         autoIncrementFieldsField.clear();
         rotationFieldsField.clear();
@@ -1779,6 +1822,8 @@ public class MainController {
         final String peekValDeser = searchValueDeserializerField.getText();
         final String peekFilter = buildSearchFilter();
         final String peekTopic = topic.trim();
+        searchService.setActiveFlatbufClassName(searchFlatbufClassNameField.getText());
+        searchService.setDecodeAsFlatbuf(decodeAsFlatbufCheck.isSelected());
         new Thread(() -> {
             try {
                 KafkaSearchService.PeekResult result = searchService.peekOne(
@@ -1909,6 +1954,8 @@ public class MainController {
         final String valDeser = searchValueDeserializerField.getText();
         final String searchFilter = buildSearchFilter();
         final boolean fromBeginning = searchFromBeginningCheck != null && searchFromBeginningCheck.isSelected();
+        searchService.setActiveFlatbufClassName(searchFlatbufClassNameField.getText());
+        searchService.setDecodeAsFlatbuf(decodeAsFlatbufCheck.isSelected());
         searchStopFlag.set(false);
         new Thread(() -> {
             try {
@@ -1940,55 +1987,84 @@ public class MainController {
                 }
 
                 result = null; // release SearchResult + its internal deque immediately; GC before runLater executes
+                final String sep = "\n" + "-".repeat(80) + "\n";
+
+                // First runLater: lightweight — template, offsets, clear, header only (no message content)
                 Platform.runLater(() -> {
-                    // Push first message to template area
                     if (extractedValue != null) {
                         pushMessageTemplateArea.setText(extractedValue);
                     }
-                    // Push partition offsets to verify offsets area
                     if (partitionOffsets != null && !partitionOffsets.isEmpty()) {
                         StringBuilder sb = new StringBuilder();
                         partitionOffsets.entrySet().stream()
                                 .sorted(Map.Entry.comparingByKey())
                                 .forEach(e -> sb.append(e.getKey()).append("=").append(e.getValue() + 1).append("\n"));
                         verifyPartitionOffsetsArea.setText(sb.toString().trim());
-                        // Also set the verify topic if not already set
                         if (verifyTopicComboBox.getValue() == null || verifyTopicComboBox.getValue().isEmpty()) {
                             verifyTopicComboBox.setValue(resultTopic);
                         }
                     }
-
-                    String sep = "\n" + "-".repeat(80) + "\n";
+                    ensureSearchResultsVisible();
+                    searchResultsArea.clear();
                     String meta = "Bootstrap : " + resultBroker + "\n"
                             + "Pod       : " + getCurrentPodName() + "\n"
                             + "Topic     : " + resultTopic + "\n"
                             + "Searched  : " + resultTime + "\n"
                             + "=".repeat(80) + "\n";
-                    if (messages != null) {
-                        searchResultsArea.clear();
-                        if (messages.isEmpty()) {
-                            searchResultsArea.setText(meta + "No matching messages found.");
-                        } else {
-                            // Append header once, then each result individually — avoids building one giant String
-                            searchResultsArea.appendText(meta + "=== " + resultCount + " message(s) found ===\n\n");
-                            for (int i = 0; i < messages.size(); i++) {
-                                searchResultsArea.appendText(messages.get(i));
-                                if (i < messages.size() - 1) searchResultsArea.appendText(sep);
-                                messages.set(i, null); // release each string as soon as it is written to UI
-                            }
-                        }
-                        searchStatusLabel.setText("\u2713 " + resultCount + " message(s) found"
-                                + (searchStopFlag.get() ? " [stopped]" : ""));
-                    } else {
+                    if (messages == null) {
                         searchResultsArea.setText("ERROR: " + resultError);
                         searchStatusLabel.setText("Search failed");
+                    } else if (messages.isEmpty()) {
+                        searchResultsArea.setText(meta + "No matching messages found.");
+                        searchStatusLabel.setText("\u2713 0 message(s) found");
+                    } else {
+                        searchResultsArea.appendText(meta + "=== " + resultCount + " message(s) found ===\n\n");
+                        searchStatusLabel.setText("\u23f3 Rendering " + resultCount + " message(s)...");
                     }
-                    ensureSearchResultsVisible();
                 });
+
+                // Kick off async batch rendering — background thread does not block.
+                // Each batch schedules the next from within the FX thread so no sleeping needed.
+                // setSearchInProgress(false) in finally fires right after this, re-enabling buttons.
+                if (messages != null && !messages.isEmpty()) {
+                    scheduleNextBatch(messages, 0, resultCount, sep);
+                }
             } finally {
                 setSearchInProgress(false);
             }
         }).start();
+    }
+
+    /**
+     * Recursively renders search result batches on the FX thread.
+     * Each invocation appends one batch and schedules the next, yielding between batches
+     * so the FX thread can render frames and stay responsive.
+     */
+    private void scheduleNextBatch(List<String> messages, int start, int totalCount, String sep) {
+        final int RENDER_BATCH = 25;
+        final int end = Math.min(start + RENDER_BATCH, messages.size());
+        final boolean isLast = end >= messages.size();
+        final int percent = (int) Math.ceil((end * 100.0) / messages.size());
+        Platform.runLater(() -> {
+            StringBuilder sb = new StringBuilder();
+            for (int j = start; j < end; j++) {
+                String msg = messages.get(j);
+                if (msg != null) {
+                    sb.append(msg);
+                    if (j < messages.size() - 1) sb.append(sep);
+                    messages.set(j, null);
+                }
+            }
+            searchResultsArea.appendText(sb.toString());
+            if (isLast) {
+                searchStatusLabel.setText("\u2713 " + totalCount + " message(s) found"
+                        + (searchStopFlag.get() ? " [stopped]" : ""));
+            } else {
+                searchStatusLabel.setText("\u23f3 Rendering " + percent + "% ("
+                        + end + "/" + totalCount + ")...");
+                scheduleNextBatch(messages, end, totalCount, sep);
+            }
+        });
     }
 
     /**
@@ -2098,6 +2174,8 @@ public class MainController {
             searchPartitionField.setDisable(inProgress || !searchSpecificPartition.isSelected());
             sourceKeyDeserializerField.setDisable(inProgress);
             searchValueDeserializerField.setDisable(inProgress);
+            searchFlatbufClassNameField.setDisable(inProgress);
+            decodeAsFlatbufCheck.setDisable(inProgress);
         });
     }
 
@@ -2207,6 +2285,8 @@ public class MainController {
             searchToTimeBox.setDisable(inProgress || !searchWithTimeRange.isSelected());
             searchMaxResults.setDisable(inProgress);
             searchValueDeserializerField.setDisable(inProgress);
+            searchFlatbufClassNameField.setDisable(inProgress);
+            decodeAsFlatbufCheck.setDisable(inProgress);
             sourceKeyDeserializerField.setDisable(inProgress);
             configsCombo.setDisable(inProgress);
         });
@@ -2222,9 +2302,12 @@ public class MainController {
             targetPartitionField.setDisable(inProgress || !partitionKeySpecific.isSelected());
             keyFieldComboBox.setDisable(inProgress || !partitionKeyField.isSelected());
             keyConstantField.setDisable(inProgress || !partitionKeyConstant.isSelected());
-            keySerializerField.setDisable(inProgress);
-            valueSerializerField.setDisable(inProgress);
-            protobufClassNameField.setDisable(inProgress);
+            boolean flatbufLocked = pushFlatbufModeCheck.isSelected();
+            keySerializerField.setDisable(inProgress || flatbufLocked);
+            valueSerializerField.setDisable(inProgress || flatbufLocked);
+            protobufClassNameField.setDisable(inProgress || flatbufLocked);
+            pushFlatbufClassNameField.setDisable(inProgress);
+            pushFlatbufModeCheck.setDisable(inProgress);
             messageHeadersField.setDisable(inProgress);
             messageCountField.setDisable(inProgress);
             threadPoolSizeField.setDisable(inProgress);
@@ -2267,14 +2350,26 @@ public class MainController {
             appendToConsole("[Push] Starting...");
 
             String valueSerializer = config.getValueSerializerClass();
-            boolean isProtobuf = valueSerializer != null
+            boolean isFlatBuffers = config.isFlatbufMode() || (valueSerializer != null
+                    && (valueSerializer.contains(".flatbuf.") || valueSerializer.contains(".flatbuffers.")));
+            boolean isProtobuf = !isFlatBuffers && valueSerializer != null
                     && (valueSerializer.contains(".proto.serializer.")
                     || (valueSerializer.endsWith("Serializer")
                     && !valueSerializer.contains("kafka.common.serialization")));
 
-            if (isProtobuf) {
+            appendToConsole("Debug: flatbufMode=" + config.isFlatbufMode() + 
+                ", isFlatBuffers=" + isFlatBuffers + 
+                ", isProtobuf=" + isProtobuf + 
+                ", valueSerializer=" + valueSerializer);
+
+            if (isFlatBuffers) {
+                appendToConsole("Using FlatBuffers engine");
+                engine = createFlatBuffersEngine(config);
+            } else if (isProtobuf) {
+                appendToConsole("Using Protobuf engine");
                 engine = createProtobufEngine(config);
             } else {
+                appendToConsole("Using standard JSON engine");
                 MessageGenerator<String> messageGenerator = buildMessageGenerator(config);
                 engine = new KafkaLoadTestEngine<>(config, messageGenerator, metrics, this::appendToConsole);
             }
@@ -3254,6 +3349,12 @@ public class MainController {
         config.setKeySerializerClass(keySerializer);
         config.setValueSerializerClass(valueSerializer);
         config.setProtobufClassName(protobufClassNameField.getText());
+        config.setFlatbufClassName(pushFlatbufClassNameField.getText());
+        config.setFlatbufMode(pushFlatbufModeCheck.isSelected());
+        if (pushFlatbufModeCheck.isSelected()) {
+            config.setKeySerializerClass("org.apache.kafka.common.serialization.ByteArraySerializer");
+            config.setValueSerializerClass("org.apache.kafka.common.serialization.ByteArraySerializer");
+        }
         config.setMavenDependency(mavenDependencyField.getText());
         config.setMavenRepoUrl(mavenRepoUrlField.getText());
         config.setAutoIncrementFields(parseAutoIncrementFields(autoIncrementFieldsField.getText()));
@@ -3413,6 +3514,79 @@ public class MainController {
             messageGenerator = buildMessageGenerator(config);
             appendToConsole("✓ String engine ready (no protobuf class configured)");
         }
+        appendToConsole("");
+
+        return new KafkaLoadTestEngine(config, messageGenerator, metrics,
+                msg -> appendToConsole(String.valueOf(msg)), cl);
+    }
+
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    private KafkaLoadTestEngine createFlatBuffersEngine(TestConfiguration config) throws Exception {
+        String serializerClassName = config.getValueSerializerClass();
+        ClassLoader cl = searchService.getCustomClassLoader();
+
+        appendToConsole("Serializer class: " + serializerClassName);
+
+        if (cl == null && config.getMavenDependency() != null && !config.getMavenDependency().trim().isEmpty()) {
+            appendToConsole("Loading Maven dependency: " + config.getMavenDependency());
+            MavenDependencyResolver.MavenDependency dep =
+                    MavenDependencyResolver.MavenDependency.parse(config.getMavenDependency());
+            cl = mavenResolver.loadDependencyIntoClassLoader(dep.getGroupId(), dep.getArtifactId(), dep.getVersion());
+            searchService.setCustomClassLoader(cl);
+            appendToConsole("\u2713 ClassLoader created with Maven dependency");
+        } else if (cl != null) {
+            appendToConsole("Using existing custom ClassLoader");
+        } else {
+            appendToConsole("No Maven dependency configured, using default ClassLoader");
+        }
+
+        // The POJO ENTITY class is what JSON is bound into and what FlatBufferUtils serializes
+        // (exactly like CloudView's AlertingEventService). The generated FlatBuffers Table lives
+        // in the sibling ".dto" package. Accept either the ".entity.*" or the ".dto.*" class name.
+        Class<?> flatbufClass = null;
+        String daoPackage = null;
+        String flatbufClassName = config.getFlatbufClassName();
+        if (flatbufClassName != null && !flatbufClassName.trim().isEmpty()) {
+            ClassLoader loader = cl != null ? cl : Thread.currentThread().getContextClassLoader();
+            String configured = flatbufClassName.trim();
+            String simpleName = configured.substring(configured.lastIndexOf('.') + 1);
+            String pkg = configured.contains(".") ? configured.substring(0, configured.lastIndexOf('.')) : "";
+
+            String entityClassName;
+            if (pkg.endsWith(".dto")) {
+                String base = pkg.substring(0, pkg.length() - ".dto".length());
+                entityClassName = base + ".entity." + simpleName;
+                daoPackage = pkg;
+            } else if (pkg.endsWith(".entity")) {
+                String base = pkg.substring(0, pkg.length() - ".entity".length());
+                entityClassName = configured;
+                daoPackage = base + ".dto";
+            } else {
+                entityClassName = configured;
+                daoPackage = pkg;
+            }
+
+            try {
+                flatbufClass = Class.forName(entityClassName, true, loader);
+                appendToConsole("\u2713 FlatBuf entity class loaded: " + flatbufClass.getName());
+                appendToConsole("\u2713 Dao (generated) package: " + daoPackage);
+            } catch (ClassNotFoundException e) {
+                // Fall back to whatever the user typed (legacy behaviour) if the entity isn't found.
+                try {
+                    flatbufClass = Class.forName(configured, true, loader);
+                    appendToConsole("\u26a0 Entity class " + entityClassName + " not found; using configured class "
+                            + flatbufClass.getName());
+                } catch (ClassNotFoundException e2) {
+                    appendToConsole("\u26a0 FlatBuf class not found: " + configured + " — sending JSON bytes");
+                }
+            }
+        }
+
+        com.personal.kafka.pilot.engine.MessageGenerator messageGenerator =
+                new com.personal.kafka.pilot.engine.FlatBuffersMessageGenerator(
+                        config.getMessageTemplate(), config.getAutoIncrementFields(),
+                        config.getRotationFields(), flatbufClass, cl, daoPackage);
+        appendToConsole("\u2713 FlatBuffers engine ready");
         appendToConsole("");
 
         return new KafkaLoadTestEngine(config, messageGenerator, metrics,
