@@ -53,12 +53,22 @@ public class KafkaSearchService {
     }
 
     /**
+     * Helper method to log to UI console if callback is provided
+     */
+    private void logUi(java.util.function.Consumer<String> uiLogger, String message) {
+        if (uiLogger != null) {
+            uiLogger.accept(message);
+        }
+    }
+
+    /**
      * Peeks one message from a topic (latest or at specific offset).
      * If no partition specified, tries partitions sequentially (0, 1, 2...) until a message is found.
      */
     public PeekResult peekOne(String bootstrapServers, String topic, String keyDeserializer,
                               String valueDeserializer, Integer partition, Long offset,
-                              Long fromMs, Long toMs, String searchText) {
+                              Long fromMs, Long toMs, String searchText,
+                              java.util.function.Consumer<String> uiLogger) {
         keyDeserializer = resolveDeserializer(keyDeserializer);
         valueDeserializer = resolveValueDeserializer(valueDeserializer);
 
@@ -73,23 +83,36 @@ public class KafkaSearchService {
             Thread.currentThread().setContextClassLoader(customClassLoader);
         }
 
+        logUi(uiLogger, "[Peek] Starting peek for topic: " + topic + 
+              (partition != null ? " partition=" + partition : " all partitions") +
+              (offset != null ? " offset=" + offset : ""));
+        
         logger.info("Peek: topic={}, partition={}, offset={}, fromMs={}, toMs={}, filter={}",
                 topic, partition, offset, fromMs, toMs, searchText);
+        
         try (KafkaConsumer<String, Object> consumer = new KafkaConsumer<>(props)) {
             List<PartitionInfo> allPartitionInfos = consumer.partitionsFor(topic);
             if (allPartitionInfos == null || allPartitionInfos.isEmpty()) {
+                logUi(uiLogger, "[Peek] ERROR: Topic not found: " + topic);
                 return PeekResult.error("Topic not found");
             }
+            
+            logUi(uiLogger, "[Peek] Topic has " + allPartitionInfos.size() + " partition(s)");
 
             // Case 1: specific partition + offset — return exactly that one message
             if (partition != null && offset != null) {
+                logUi(uiLogger, "[Peek] Seeking to partition=" + partition + " offset=" + offset);
                 TopicPartition tp = new TopicPartition(topic, partition);
                 consumer.assign(Collections.singletonList(tp));
                 consumer.seek(tp, offset);
                 ConsumerRecords<String, Object> records = consumer.poll(Duration.ofSeconds(10));
                 for (ConsumerRecord<String, Object> rec : records) {
-                    if (rec.offset() == offset) return formatPeekResult(rec, partition, offset);
+                    if (rec.offset() == offset) {
+                        logUi(uiLogger, "[Peek] Found message at partition=" + partition + " offset=" + offset);
+                        return formatPeekResult(rec, partition, offset, uiLogger);
+                    }
                 }
+                logUi(uiLogger, "[Peek] No message at offset " + offset + " in partition " + partition);
                 return PeekResult.error("No message at offset " + offset + " in partition " + partition);
             }
 
@@ -126,26 +149,34 @@ public class KafkaSearchService {
             }
 
             int emptyPolls = 0;
+            int scannedCount = 0;
             while (emptyPolls < 3) {
                 ConsumerRecords<String, Object> records = consumer.poll(Duration.ofSeconds(10));
                 if (records.isEmpty()) { emptyPolls++; continue; }
                 for (ConsumerRecord<String, Object> rec : records) {
+                    scannedCount++;
                     if (toMs != null && rec.timestamp() > toMs) continue;
                     String valueStr = formatValue(rec.value());
                     if (!matchesFilter(valueStr, searchText)) continue;
-                    return formatPeekResult(rec, rec.partition(), null);
+                    logUi(uiLogger, "[Peek] Found matching message after scanning " + scannedCount + " records");
+                    return formatPeekResult(rec, rec.partition(), null, uiLogger);
                 }
                 emptyPolls = 0;
             }
 
+            logUi(uiLogger, "[Peek] No messages found after scanning " + scannedCount + " records");
             return PeekResult.error("No messages found");
         } catch (Exception e) {
             logger.error("Peek error", e);
+            logUi(uiLogger, "[Peek] ERROR: " + e.getMessage());
             return PeekResult.error(e.getMessage());
         }
     }
 
-    private PeekResult formatPeekResult(ConsumerRecord<String, Object> rec, int partition, Long offset) {
+    private PeekResult formatPeekResult(ConsumerRecord<String, Object> rec, int partition, Long offset,
+                                          java.util.function.Consumer<String> uiLogger) {
+        logUi(uiLogger, "[Peek] Formatting result for partition=" + partition + " offset=" + rec.offset());
+        
         String messageValue = null;
         if (!decodeAsFlatbuf) {
             messageValue = (rec.value() instanceof String) ? (String) rec.value() : convertProtobufToJson(rec.value());
@@ -178,6 +209,7 @@ public class KafkaSearchService {
 
         String status = "1 message from partition " + partition
                 + (offset != null ? " @ offset " + offset : " (latest)");
+        logUi(uiLogger, "[Peek] Successfully formatted result");
         return PeekResult.success(jsonOutput, status, messageValue);
     }
 
@@ -663,43 +695,113 @@ public class KafkaSearchService {
                 return null;
             }
 
+            // Build maps for vector handling: fieldName -> Length method, fieldName -> indexed accessor
+            Map<String, java.lang.reflect.Method> lengthMethods = new HashMap<>();
+            Map<String, java.lang.reflect.Method> vectorAccessors = new HashMap<>();
+            for (java.lang.reflect.Method m : clazz.getMethods()) {
+                if (!m.getDeclaringClass().getName().equals(clazz.getName())) continue;
+                if (m.getName().startsWith("__") || m.getName().startsWith("mutate")) continue;
+                if (m.getName().endsWith("Length") && m.getParameterCount() == 0 && m.getReturnType() == int.class) {
+                    String baseName = m.getName().substring(0, m.getName().length() - 6); // remove "Length"
+                    lengthMethods.put(baseName, m);
+                }
+                if (m.getParameterCount() == 1 && m.getParameterTypes()[0] == int.class) {
+                    vectorAccessors.put(m.getName(), m);
+                }
+            }
+
             Map<String, Object> map = new LinkedHashMap<>();
 
             for (Map.Entry<Integer, java.lang.reflect.Method> entry : slotToMethod.entrySet()) {
                 int slot = entry.getKey();
                 java.lang.reflect.Method m = entry.getValue();
+                String fieldName = m.getName();
                 if (slot >= vtableSize) {
-                    map.put(m.getName(), null);
+                    map.put(fieldName, null);
                     continue;
                 }
                 int fieldOffset = bb.getShort(vtableOffset + slot) & 0xFFFF;
                 Class<?> ret = m.getReturnType();
                 if (fieldOffset == 0) {
-                    if (ret == boolean.class) map.put(m.getName(), false);
-                    else if (ret == long.class || ret == int.class || ret == short.class || ret == byte.class) map.put(m.getName(), 0);
-                    else map.put(m.getName(), null);
+                    if (ret == boolean.class) map.put(fieldName, false);
+                    else if (ret == long.class || ret == int.class || ret == short.class || ret == byte.class) map.put(fieldName, 0);
+                    else map.put(fieldName, null);
                     continue;
                 }
                 int abs = rootOffset + fieldOffset;
                 try {
-                    if (ret == String.class) {
+                    // Check if this field is a vector length field (ends with "Length")
+                    // and there's a corresponding indexed accessor for the base name
+                    String vectorBaseName = null;
+                    if (fieldName.endsWith("Length") && fieldName.length() > 6) {
+                        vectorBaseName = fieldName.substring(0, fieldName.length() - 6); // remove "Length"
+                    }
+                    if (vectorBaseName != null && vectorAccessors.containsKey(vectorBaseName)) {
+                        // Read vector: [length: int] [element offsets or values...]
+                        int vecLen = bb.getInt(abs);
+                        java.lang.reflect.Method accessor = vectorAccessors.get(vectorBaseName);
+                        Class<?> elementType = accessor.getReturnType();
+                        java.util.List<Object> elements = new java.util.ArrayList<>();
+                        int elemOffset = abs + 4; // skip length field
+                        for (int i = 0; i < vecLen && i < 1000; i++) { // cap at 1000 elements
+                            if (elementType == String.class) {
+                                int elemAbs = elemOffset + bb.getInt(elemOffset);
+                                int strLen = bb.getInt(elemAbs);
+                                byte[] strBytes = new byte[strLen];
+                                bb.position(elemAbs + 4);
+                                bb.get(strBytes);
+                                elements.add(new String(strBytes, java.nio.charset.StandardCharsets.UTF_8));
+                            } else if (elementType == long.class) {
+                                elements.add(bb.getLong(elemOffset));
+                            } else if (elementType == int.class) {
+                                elements.add(bb.getInt(elemOffset));
+                            } else if (elementType == short.class) {
+                                elements.add((int) bb.getShort(elemOffset));
+                            } else if (elementType == byte.class) {
+                                elements.add((int) bb.get(elemOffset));
+                            } else if (elementType == boolean.class) {
+                                elements.add(bb.get(elemOffset) != 0);
+                            } else if (elementType == float.class) {
+                                elements.add(bb.getFloat(elemOffset));
+                            } else if (elementType == double.class) {
+                                elements.add(bb.getDouble(elemOffset));
+                            } else {
+                                // Nested table/object - read as nested structure
+                                int nestedOffset = bb.getInt(elemOffset);
+                                if (nestedOffset != 0) {
+                                    int nestedAbs = elemOffset + nestedOffset;
+                                    // Extract the nested object bytes and recursively parse
+                                    byte[] nestedBytes = extractObjectBytes(bb, nestedAbs);
+                                    String nestedJson = parseFlatBufferDirect(nestedBytes, elementType);
+                                    if (nestedJson != null) {
+                                        elements.add(objectMapper.readValue(nestedJson, Object.class));
+                                    } else {
+                                        elements.add(null);
+                                    }
+                                } else {
+                                    elements.add(null);
+                                }
+                            }
+                            elemOffset += 4; // each offset/element is 4 bytes
+                        }
+                        map.put(fieldName, vecLen);  // e.g., "resourceTagKeysLength": 3
+                        map.put(vectorBaseName, elements);  // e.g., "resourceTagKeys": [...]
+                    } else if (ret == String.class) {
                         int strAbs = abs + bb.getInt(abs);
                         int strLen = bb.getInt(strAbs);
                         byte[] strBytes = new byte[strLen];
                         bb.position(strAbs + 4);
                         bb.get(strBytes);
-                        map.put(m.getName(), new String(strBytes, java.nio.charset.StandardCharsets.UTF_8));
-                    } else if (ret == long.class)    { map.put(m.getName(), bb.getLong(abs)); }
-                    else if (ret == int.class)        { map.put(m.getName(), bb.getInt(abs)); }
-                    else if (ret == short.class)      { map.put(m.getName(), (int) bb.getShort(abs)); }
-                    else if (ret == byte.class)       { map.put(m.getName(), (int) bb.get(abs)); }
-                    else if (ret == boolean.class)    { map.put(m.getName(), bb.get(abs) != 0); }
-                    else if (ret == float.class)      { map.put(m.getName(), bb.getFloat(abs)); }
-                    else if (ret == double.class)     { map.put(m.getName(), bb.getDouble(abs)); }
-                    // vectors (String[] / Table[]) — read length only for now
-                    else if (ret == int.class)        { map.put(m.getName(), bb.getInt(abs)); }
+                        map.put(fieldName, new String(strBytes, java.nio.charset.StandardCharsets.UTF_8));
+                    } else if (ret == long.class)    { map.put(fieldName, bb.getLong(abs)); }
+                    else if (ret == int.class)        { map.put(fieldName, bb.getInt(abs)); }
+                    else if (ret == short.class)      { map.put(fieldName, (int) bb.getShort(abs)); }
+                    else if (ret == byte.class)       { map.put(fieldName, (int) bb.get(abs)); }
+                    else if (ret == boolean.class)    { map.put(fieldName, bb.get(abs) != 0); }
+                    else if (ret == float.class)      { map.put(fieldName, bb.getFloat(abs)); }
+                    else if (ret == double.class)     { map.put(fieldName, bb.getDouble(abs)); }
                 } catch (Exception e) {
-                    map.put(m.getName(), null);
+                    map.put(fieldName, null);
                 }
             }
 
@@ -709,6 +811,20 @@ public class KafkaSearchService {
             logger.debug("Direct FlatBuffer parse failed: {}", e.getMessage());
             return null;
         }
+    }
+
+    /** Extracts a nested object's bytes from the buffer for recursive parsing */
+    private byte[] extractObjectBytes(java.nio.ByteBuffer bb, int offset) {
+        // Find the vtable to determine object size
+        int vtableRelOffset = bb.getInt(offset);
+        int vtableOffset = offset - vtableRelOffset;
+        int vtableSize = bb.getShort(vtableOffset) & 0xFFFF;
+        // Estimate size: vtableSize * 2 bytes for fields + some padding
+        int estimatedSize = Math.min(vtableSize * 4 + 8, bb.capacity() - offset);
+        byte[] result = new byte[estimatedSize];
+        bb.position(offset);
+        bb.get(result);
+        return result;
     }
 
     /**
@@ -959,6 +1075,22 @@ public class KafkaSearchService {
         Class<?> actualClass = table.getClass();
         String topLevelClassName = actualClass.getName();
         Map<String, Object> map = new LinkedHashMap<>();
+
+        // Build maps for vector handling: fieldName -> Length method, fieldName -> indexed accessor
+        Map<String, java.lang.reflect.Method> lengthMethods = new HashMap<>();
+        Map<String, java.lang.reflect.Method> vectorAccessors = new HashMap<>();
+        for (java.lang.reflect.Method m : actualClass.getMethods()) {
+            if (!m.getDeclaringClass().getName().equals(topLevelClassName)) continue;
+            if (m.getName().startsWith("__") || m.getName().startsWith("mutate")) continue;
+            if (m.getName().endsWith("Length") && m.getParameterCount() == 0 && m.getReturnType() == int.class) {
+                String baseName = m.getName().substring(0, m.getName().length() - 6); // remove "Length"
+                lengthMethods.put(baseName, m);
+            }
+            if (m.getParameterCount() == 1 && m.getParameterTypes()[0] == int.class) {
+                vectorAccessors.put(m.getName(), m);
+            }
+        }
+
         for (java.lang.reflect.Method m : actualClass.getMethods()) {
             if (m.getParameterCount() != 0) continue;
             if (FLATBUF_EXCLUDED_METHODS.contains(m.getName())) continue;
@@ -970,29 +1102,72 @@ public class KafkaSearchService {
             Class<?> ret = m.getReturnType();
             if (ret == void.class) continue;
             if (java.nio.ByteBuffer.class.isAssignableFrom(ret)) continue;
+            String fieldName = m.getName();
             try {
                 Object v = m.invoke(table);
-                // Recurse into nested objects that look like FlatBuffer Tables
-                if (v != null) {
-                    boolean isNestedTable = false;
-                    for (Class<?> iface : v.getClass().getSuperclass() != null
-                            ? new Class[]{v.getClass(), v.getClass().getSuperclass()} : new Class[]{v.getClass()}) {
-                        if (iface.getName().equals("com.google.flatbuffers.Table")) { isNestedTable = true; break; }
-                    }
-                    if (!isNestedTable) {
-                        // also check by superclass chain name
-                        Class<?> sc = v.getClass().getSuperclass();
-                        while (sc != null && !isNestedTable) {
-                            if (sc.getName().equals("com.google.flatbuffers.Table")) isNestedTable = true;
-                            sc = sc.getSuperclass();
+
+                // Check if this is a vector length field with a corresponding accessor
+                String vectorBaseName = null;
+                if (fieldName.endsWith("Length") && fieldName.length() > 6) {
+                    vectorBaseName = fieldName.substring(0, fieldName.length() - 6); // remove "Length"
+                }
+                if (vectorBaseName != null && vectorAccessors.containsKey(vectorBaseName) && v instanceof Integer) {
+                    int vecLen = (Integer) v;
+                    java.lang.reflect.Method accessor = vectorAccessors.get(vectorBaseName);
+                    Class<?> elementType = accessor.getReturnType();
+                    java.util.List<Object> elements = new java.util.ArrayList<>();
+                    for (int i = 0; i < vecLen && i < 1000; i++) { // cap at 1000 elements
+                        try {
+                            Object elem = accessor.invoke(table, i);
+                            if (elem != null) {
+                                // Check if element is a nested FlatBuffer Table
+                                boolean isNestedTable = false;
+                                for (Class<?> iface : elem.getClass().getSuperclass() != null
+                                        ? new Class[]{elem.getClass(), elem.getClass().getSuperclass()} : new Class[]{elem.getClass()}) {
+                                    if (iface.getName().equals("com.google.flatbuffers.Table")) { isNestedTable = true; break; }
+                                }
+                                if (!isNestedTable) {
+                                    Class<?> sc = elem.getClass().getSuperclass();
+                                    while (sc != null && !isNestedTable) {
+                                        if (sc.getName().equals("com.google.flatbuffers.Table")) isNestedTable = true;
+                                        sc = sc.getSuperclass();
+                                    }
+                                }
+                                if (isNestedTable) {
+                                    String nested = flatTableToJson(elem, elem.getClass());
+                                    try { elem = objectMapper.readValue(nested, Object.class); } catch (Exception e) { elem = nested; }
+                                }
+                            }
+                            elements.add(elem);
+                        } catch (Exception e) {
+                            elements.add(null);
                         }
                     }
-                    if (isNestedTable) {
-                        String nested = flatTableToJson(v, v.getClass());
-                        try { v = objectMapper.readValue(nested, Object.class); } catch (Exception e) { v = nested; }
+                    map.put(fieldName, vecLen);  // e.g., "resourceTagKeysLength": 3
+                    map.put(vectorBaseName, elements);  // e.g., "resourceTagKeys": [...]
+                } else {
+                    // Normal field handling - recurse into nested objects that look like FlatBuffer Tables
+                    if (v != null) {
+                        boolean isNestedTable = false;
+                        for (Class<?> iface : v.getClass().getSuperclass() != null
+                                ? new Class[]{v.getClass(), v.getClass().getSuperclass()} : new Class[]{v.getClass()}) {
+                            if (iface.getName().equals("com.google.flatbuffers.Table")) { isNestedTable = true; break; }
+                        }
+                        if (!isNestedTable) {
+                            // also check by superclass chain name
+                            Class<?> sc = v.getClass().getSuperclass();
+                            while (sc != null && !isNestedTable) {
+                                if (sc.getName().equals("com.google.flatbuffers.Table")) isNestedTable = true;
+                                sc = sc.getSuperclass();
+                            }
+                        }
+                        if (isNestedTable) {
+                            String nested = flatTableToJson(v, v.getClass());
+                            try { v = objectMapper.readValue(nested, Object.class); } catch (Exception e) { v = nested; }
+                        }
                     }
+                    map.put(fieldName, v);
                 }
-                map.put(m.getName(), v);
             } catch (Exception ignored) {
             }
         }

@@ -493,24 +493,9 @@ public class MainController {
         sourceOffsetField.textProperty().addListener((obs, o, nv) -> updateFromBeginningVisibility());
 
         decodeAsFlatbufCheck.selectedProperty().addListener((obs, o, flatbuf) -> {
-            searchTextFilter.setDisable(flatbuf);
-            searchTextFilter2.setDisable(flatbuf);
-            searchOperatorCombo.setDisable(flatbuf);
-            // Partition & offset stay usable in FlatBuffer mode — they are governed only by
-            // the "specific partition" selection, so the user can fetch a message at a given offset.
-            searchAllPartitions.setDisable(false);
-            searchSpecificPartition.setDisable(false);
-            searchPartitionField.setDisable(!searchSpecificPartition.isSelected());
-            offsetLabel.setDisable(!searchSpecificPartition.isSelected());
-            sourceOffsetField.setDisable(!searchSpecificPartition.isSelected());
-            searchNoTimeRange.setDisable(flatbuf);
-            searchWithTimeRange.setDisable(flatbuf);
-            searchFromTimeBox.setDisable(flatbuf || !searchWithTimeRange.isSelected());
-            searchToTimeBox.setDisable(flatbuf || !searchWithTimeRange.isSelected());
-            searchMaxResults.setDisable(flatbuf);
+            // Only disable key/value deserializers - FlatBuffer uses its own class-based decoding
             sourceKeyDeserializerField.setDisable(flatbuf);
             searchValueDeserializerField.setDisable(flatbuf);
-            searchFromBeginningBox.setDisable(flatbuf);
         });
 
         pushFlatbufModeCheck.selectedProperty().addListener((obs, o, flatbuf) -> {
@@ -1825,11 +1810,20 @@ public class MainController {
         searchService.setActiveFlatbufClassName(searchFlatbufClassNameField.getText());
         searchService.setDecodeAsFlatbuf(decodeAsFlatbufCheck.isSelected());
         new Thread(() -> {
+            // Auto-download Maven dependencies if configured
+            if (!autoDownloadMavenDependencies()) {
+                Platform.runLater(() -> {
+                    searchStatusLabel.setText("⚠ Failed to download dependencies");
+                    setSearchInProgress(false);
+                });
+                return;
+            }
             try {
                 KafkaSearchService.PeekResult result = searchService.peekOne(
                         bootstrapServers, peekTopic,
                         peekKeyDeser, peekValDeser,
-                        finalPartition, finalOffset, ff, ft, peekFilter);
+                        finalPartition, finalOffset, ff, ft, peekFilter,
+                        this::appendToConsole);
 
                 // Extract partition/offset from result and store in memory immediately
                 Integer peekResultPartition = null;
@@ -1958,6 +1952,14 @@ public class MainController {
         searchService.setDecodeAsFlatbuf(decodeAsFlatbufCheck.isSelected());
         searchStopFlag.set(false);
         new Thread(() -> {
+            // Auto-download Maven dependencies if configured
+            if (!autoDownloadMavenDependencies()) {
+                Platform.runLater(() -> {
+                    searchStatusLabel.setText("⚠ Failed to download dependencies");
+                    setSearchInProgress(false);
+                });
+                return;
+            }
             try {
                 KafkaSearchService.SearchResult result = searchService.searchMessages(
                         bootstrapServers, topic.trim(),
@@ -2120,9 +2122,22 @@ public class MainController {
         setTailInProgress(true);
         tailStopFlag.set(false);
 
-        tailService.setCustomClassLoader(searchService.getCustomClassLoader());
-
         new Thread(() -> {
+            // Auto-download Maven dependencies if configured
+            if (!autoDownloadMavenDependencies()) {
+                Platform.runLater(() -> {
+                    searchStatusLabel.setText("⚠ Failed to download dependencies");
+                    setTailInProgress(false);
+                });
+                return;
+            }
+            // Set classloader after auto-download
+            tailService.setCustomClassLoader(searchService.getCustomClassLoader());
+            tailService.setActiveFlatbufClassName(searchFlatbufClassNameField.getText());
+            tailService.setDecodeAsFlatbuf(decodeAsFlatbufCheck.isSelected());
+
+            appendToConsole("[Tail] Starting tail operation on topic: " + topic);
+            
             tailService.tail(bootstrapServers, topic.trim(), keyDeser, valDeser, fp, searchFilter,
                     tailStopFlag, new KafkaTailService.TailCallback() {
                 @Override
@@ -2135,6 +2150,9 @@ public class MainController {
                     }
                     final String batch = sb.toString();
                     final int total = totalSoFar;
+                    final int batchSize = messages.size();
+                    // Limited console logging: log batch arrival and first message preview (first 200 chars)
+                    final String firstMsgPreview = messages.isEmpty() ? "" : messages.get(0).substring(0, Math.min(200, messages.get(0).length())).replaceAll("\s+", " ");
                     Platform.runLater(() -> {
                         String current = searchResultsArea.getText();
                         if (current.isEmpty()) {
@@ -2143,6 +2161,8 @@ public class MainController {
                             searchResultsArea.setText(batch + sep + current);
                         }
                         searchStatusLabel.setText("⏳ Tailing… " + total + "/200 messages");
+                        // Log to console (limited - only first message preview)
+                        appendToConsole("[Tail] Batch received: " + batchSize + " message(s), total: " + total + " | Preview: " + firstMsgPreview);
                     });
                 }
 
@@ -2150,11 +2170,11 @@ public class MainController {
                 public void onStop(String reason, int total) {
                     Platform.runLater(() -> {
                         searchStatusLabel.setText("✓ Tail stopped: " + reason + " | " + total + " message(s)");
-                        appendToConsole("[Tail] Stopped: " + reason + ", " + total + " message(s) received");
+                        appendToConsole("[Tail] Stopped: " + reason + ", " + total + " message(s) total");
                         setTailInProgress(false);
                     });
                 }
-            });
+            }, this::appendToConsole);
         }, "kafka-tail-thread").start();
     }
 
@@ -2279,10 +2299,7 @@ public class MainController {
             searchPartitionField.setDisable(inProgress || !searchSpecificPartition.isSelected());
             sourceOffsetField.setDisable(inProgress || !searchSpecificPartition.isSelected());
             offsetLabel.setDisable(inProgress || !searchSpecificPartition.isSelected());
-            searchNoTimeRange.setDisable(inProgress);
-            searchWithTimeRange.setDisable(inProgress);
-            searchFromTimeBox.setDisable(inProgress || !searchWithTimeRange.isSelected());
-            searchToTimeBox.setDisable(inProgress || !searchWithTimeRange.isSelected());
+            // Time range controls remain enabled during operations (consistent with tail)
             searchMaxResults.setDisable(inProgress);
             searchValueDeserializerField.setDisable(inProgress);
             searchFlatbufClassNameField.setDisable(inProgress);
@@ -2381,6 +2398,16 @@ public class MainController {
             setPushInProgress(true);
 
             new Thread(() -> {
+                // Auto-download Maven dependencies if configured
+                if (!autoDownloadMavenDependencies()) {
+                    Platform.runLater(() -> {
+                        statusLabel.setText("⚠ Failed to download dependencies");
+                        startButton.setDisable(false);
+                        stopButton.setDisable(true);
+                        setPushInProgress(false);
+                    });
+                    return;
+                }
                 try {
                     engine.start();
                 } finally {
@@ -3203,6 +3230,54 @@ public class MainController {
             }
         }
         return result;
+    }
+
+    /**
+     * Auto-downloads Maven dependencies if configured and not already loaded.
+     * Called before search, peek, tail, and push operations.
+     * @return true if dependencies are ready (or not needed), false if download failed
+     */
+    private boolean autoDownloadMavenDependencies() {
+        String dependency = mavenDependencyField.getText();
+        if (dependency == null || dependency.trim().isEmpty()) {
+            return true; // No dependencies configured, proceed without classloader
+        }
+
+        // Check if already loaded
+        if (searchService.getCustomClassLoader() != null) {
+            return true; // Already have a classloader
+        }
+
+        appendToConsole("[Auto-Download] Resolving Maven dependencies...");
+        try {
+            String repoUrl = mavenRepoUrlField.getText();
+            if (repoUrl != null && !repoUrl.trim().isEmpty()) {
+                mavenResolver.setCustomRepository(repoUrl.trim());
+                appendToConsole("[Auto-Download] Using repo: " + repoUrl.trim());
+            }
+
+            List<MavenDependencyResolver.MavenDependency> deps = parseMavenDependencies(dependency);
+            appendToConsole("[Auto-Download] Resolving " + deps.size() + " dependencies...");
+
+            List<File> allFiles = new ArrayList<>();
+            for (MavenDependencyResolver.MavenDependency dep : deps) {
+                appendToConsole("[Auto-Download] Resolving: " + dep);
+                List<File> files = mavenResolver.resolveDependency(
+                        dep.getGroupId(), dep.getArtifactId(), dep.getVersion());
+                allFiles.addAll(files);
+            }
+
+            URLClassLoader loader = mavenResolver.loadDependenciesIntoClassLoader(allFiles);
+            searchService.setCustomClassLoader(loader);
+            tailService.setCustomClassLoader(loader);
+
+            appendToConsole("[Auto-Download] Completed: " + allFiles.size() + " artifacts loaded");
+            return true;
+        } catch (Exception e) {
+            logger.error("[Auto-Download] Error", e);
+            appendToConsole("[Auto-Download] ERROR: " + e.getMessage());
+            return false;
+        }
     }
 
     // ========== CONFIGURATION ==========
