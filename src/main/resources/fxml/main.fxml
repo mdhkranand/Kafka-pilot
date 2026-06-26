@@ -15,8 +15,8 @@
     <!-- Custom title bar -->
     <top>
         <VBox style="-fx-background-color: #1a252f;">
-            <!-- Common section: Kafka Brokers Management + Maven dependency -->
-            <GridPane hgap="10" vgap="5" style="-fx-padding: 6 15 6 15; -fx-background-color: #2c3e50;">
+            <!-- Always-visible: Active Pods + Selected for Work -->
+            <GridPane hgap="10" vgap="5" style="-fx-padding: 8 15 6 15; -fx-background-color: #2c3e50; -fx-border-color: #34495e; -fx-border-width: 0 0 1 0;">
                 <columnConstraints>
                     <ColumnConstraints minWidth="130" prefWidth="130"/>
                     <ColumnConstraints hgrow="ALWAYS"/>
@@ -25,7 +25,7 @@
 
                 <!-- Row 0: Active Pod (shows connected pod names only) -->
                 <Label text="Active Pod(s):" GridPane.rowIndex="0" GridPane.columnIndex="0"
-                       style="-fx-text-fill: #27ae60; -fx-font-weight: bold; -fx-font-size: 12px;"/>
+                       style="-fx-text-fill: #2ecc71; -fx-font-weight: bold; -fx-font-size: 12px;"/>
                 <HBox spacing="10" alignment="CENTER_LEFT" GridPane.rowIndex="0" GridPane.columnIndex="1">
                     <TextField fx:id="activePodsField" promptText="Not Connected" editable="false" HBox.hgrow="ALWAYS"
                                style="-fx-background-color: #34495e; -fx-text-fill: #ecf0f1;"/>
@@ -33,146 +33,158 @@
 
                 <!-- Row 1: Selected for Work (dropdown + Connect) -->
                 <Label text="Selected for Work:" GridPane.rowIndex="1" GridPane.columnIndex="0"
-                       style="-fx-text-fill: #f39c12; -fx-font-weight: bold; -fx-font-size: 12px;"/>
+                       style="-fx-text-fill: #f1c40f; -fx-font-weight: bold; -fx-font-size: 12px;"/>
                 <HBox spacing="8" alignment="CENTER_LEFT" GridPane.rowIndex="1" GridPane.columnIndex="1">
                     <ComboBox fx:id="selectedForWorkComboBox" promptText="Select Pod for Operations"
                               editable="false" HBox.hgrow="ALWAYS"/>
                     <Button fx:id="connectButton" text="Connect" onAction="#handleConnect"
                             styleClass="btn-green" style="-fx-font-size: 11px;"/>
                 </HBox>
-
-                <!-- Row 2: Broker Details (Name + Hosts + Add/Update/Del) -->
-                <Label text="Broker Details:" GridPane.rowIndex="2" GridPane.columnIndex="0"
-                       style="-fx-text-fill: #ecf0f1; -fx-font-weight: bold; -fx-font-size: 12px;"/>
-                <HBox spacing="8" alignment="CENTER_LEFT" GridPane.rowIndex="2" GridPane.columnIndex="1">
-                    <TextField fx:id="brokerNameField" promptText="Name (e.g., POD1)" prefWidth="150"/>
-                    <TextField fx:id="brokerServersField" promptText="host1:9092,host2:9092" HBox.hgrow="ALWAYS"/>
-                    <Button fx:id="addBrokerButton" text="Add" onAction="#handleAddBroker"
-                            styleClass="btn-green" style="-fx-font-size: 11px;"/>
-                    <Button fx:id="updateBrokerButton" text="Update" onAction="#handleUpdateBroker"
-                            style="-fx-font-size: 11px;"/>
-                    <Button fx:id="deleteBrokerButton" text="Delete" onAction="#handleDeleteBroker"
-                            style="-fx-font-size: 11px; -fx-text-fill: #c0392b;"/>
-                </HBox>
-
-                <!-- Row 3: SSL/TLS Configuration (Collapsible) - Right aligned below broker buttons -->
-                <HBox spacing="10" alignment="CENTER_LEFT" GridPane.rowIndex="3" GridPane.columnIndex="1">
-                    <TitledPane fx:id="sslConfigPane" text="SSL/TLS Configuration (Optional)" expanded="false" collapsible="true"
-                                HBox.hgrow="ALWAYS" prefWidth="800">
-                        <VBox spacing="8" style="-fx-padding: 8;">
-                            <!-- Security Protocol -->
-                            <HBox spacing="10" alignment="CENTER_LEFT">
-                                <Label text="Security Protocol:" minWidth="130"/>
-                                <ComboBox fx:id="sslSecurityProtocolCombo" promptText="PLAINTEXT" prefWidth="180">
-                                    <items>
-                                        <FXCollections fx:factory="observableArrayList">
-                                            <String fx:value="PLAINTEXT"/>
-                                            <String fx:value="SSL"/>
-                                            <String fx:value="SASL_PLAINTEXT"/>
-                                            <String fx:value="SASL_SSL"/>
-                                        </FXCollections>
-                                    </items>
-                                </ComboBox>
-                                <CheckBox fx:id="sslEnabledCheckBox" text="Enable SSL/TLS" style="-fx-text-fill: #333;"/>
-                            </HBox>
-
-                            <!-- Truststore Section -->
-                            <Label text="Truststore (Server Authentication):" style="-fx-font-weight: bold; -fx-font-size: 11px;"/>
-                            <HBox spacing="8" alignment="CENTER_LEFT">
-                                <Label text="Location:" minWidth="80"/>
-                                <TextField fx:id="sslTruststoreLocationField" promptText="/path/to/truststore.jks" HBox.hgrow="ALWAYS"/>
-                                <Button text="Browse..." onAction="#handleBrowseTruststore" style="-fx-font-size: 11px;"/>
-                            </HBox>
-                            <HBox spacing="8" alignment="CENTER_LEFT">
-                                <Label text="Password:" minWidth="80"/>
-                                <PasswordField fx:id="sslTruststorePasswordField" promptText="Truststore password" prefWidth="200"/>
-                                <Label text="Type:" minWidth="50"/>
-                                <ComboBox fx:id="sslTruststoreTypeCombo" promptText="JKS" prefWidth="100">
-                                    <items>
-                                        <FXCollections fx:factory="observableArrayList">
-                                            <String fx:value="JKS"/>
-                                            <String fx:value="PKCS12"/>
-                                        </FXCollections>
-                                    </items>
-                                </ComboBox>
-                            </HBox>
-
-                            <!-- Keystore Section (Mutual TLS) -->
-                            <Label text="Keystore (Client Authentication - Mutual TLS, Optional):" style="-fx-font-weight: bold; -fx-font-size: 11px;"/>
-                            <HBox spacing="8" alignment="CENTER_LEFT">
-                                <Label text="Location:" minWidth="80"/>
-                                <TextField fx:id="sslKeystoreLocationField" promptText="/path/to/keystore.jks (optional)" HBox.hgrow="ALWAYS"/>
-                                <Button text="Browse..." onAction="#handleBrowseKeystore" style="-fx-font-size: 11px;"/>
-                            </HBox>
-                            <HBox spacing="8" alignment="CENTER_LEFT">
-                                <Label text="Password:" minWidth="80"/>
-                                <PasswordField fx:id="sslKeystorePasswordField" promptText="Keystore password" prefWidth="200"/>
-                                <Label text="Type:" minWidth="50"/>
-                                <ComboBox fx:id="sslKeystoreTypeCombo" promptText="JKS" prefWidth="100">
-                                    <items>
-                                        <FXCollections fx:factory="observableArrayList">
-                                            <String fx:value="JKS"/>
-                                            <String fx:value="PKCS12"/>
-                                        </FXCollections>
-                                    </items>
-                                </ComboBox>
-                            </HBox>
-                            <HBox spacing="8" alignment="CENTER_LEFT">
-                                <Label text="Key Password:" minWidth="80"/>
-                                <PasswordField fx:id="sslKeyPasswordField" promptText="Private key password (if different)" prefWidth="280"/>
-                            </HBox>
-
-                            <!-- Endpoint Identification -->
-                            <HBox spacing="10" alignment="CENTER_LEFT">
-                                <Label text="Endpoint ID Algorithm:" minWidth="130"/>
-                                <ComboBox fx:id="sslEndpointAlgorithmCombo" promptText="https" prefWidth="150">
-                                    <items>
-                                        <FXCollections fx:factory="observableArrayList">
-                                            <String fx:value="https"/>
-                                            <String fx:value=""/>
-                                        </FXCollections>
-                                    </items>
-                                </ComboBox>
-                                <Label text="(empty = disable hostname verification)" style="-fx-font-size: 10px; -fx-text-fill: #666;"/>
-                            </HBox>
-
-                            <!-- SSL Status Label -->
-                            <Label fx:id="sslConfigStatusLabel" text="" style="-fx-font-size: 11px; -fx-text-fill: #27ae60;"/>
-                        </VBox>
-                    </TitledPane>
-                </HBox>
-
-                <!-- Row 4: Maven dependency -->
-                <Label text="Maven Dependency:" GridPane.rowIndex="4" GridPane.columnIndex="0"
-                       style="-fx-text-fill: #ecf0f1; -fx-font-weight: bold; -fx-font-size: 12px;"/>
-                <HBox spacing="10" alignment="CENTER_LEFT" GridPane.rowIndex="4" GridPane.columnIndex="1">
-                    <TextField fx:id="mavenDependencyField"
-                               promptText="groupId:artifactId:version"
-                               HBox.hgrow="ALWAYS"/>
-                    <Button text="Download" onAction="#handleDownloadDependency"
-                            styleClass="btn-blue" style="-fx-font-size: 12px;"/>
-                </HBox>
-
-                <!-- Row 5: Maven Repo URL -->
-                <Label text="Maven Repo URL:" GridPane.rowIndex="5" GridPane.columnIndex="0"
-                       style="-fx-text-fill: #ecf0f1; -fx-font-weight: bold; -fx-font-size: 12px;"/>
-                <HBox spacing="10" alignment="CENTER_LEFT" GridPane.rowIndex="5" GridPane.columnIndex="1">
-                    <TextField fx:id="mavenRepoUrlField"
-                               promptText="https://your-repo/maven2/ (optional, leave blank for Maven Central)"
-                               HBox.hgrow="ALWAYS"/>
-                </HBox>
-
-                <!-- Row 6: Configuration -->
-                <Label text="Configuration:" GridPane.rowIndex="6" GridPane.columnIndex="0"
-                       style="-fx-text-fill: #ecf0f1; -fx-font-weight: bold; -fx-font-size: 12px;"/>
-                <HBox spacing="10" alignment="CENTER_LEFT" GridPane.rowIndex="6" GridPane.columnIndex="1">
-                    <ComboBox fx:id="configsCombo" promptText="Select saved config" prefWidth="200"/>
-                    <Button text="Load" onAction="#handleLoadConfig"/>
-                    <Button text="Save" onAction="#handleSaveConfig"/>
-                    <Button text="Delete" onAction="#handleDeleteConfig"
-                            style="-fx-font-size: 11px; -fx-text-fill: #c0392b;"/>
-                </HBox>
             </GridPane>
+
+            <!-- Collapsible configuration section -->
+            <TitledPane text="⚙  Configuration" expanded="false" collapsible="true"
+                        styleClass="config-pane">
+                <GridPane hgap="10" vgap="5" style="-fx-padding: 6 15 6 15; -fx-background-color: #2c3e50;">
+                    <columnConstraints>
+                        <ColumnConstraints minWidth="130" prefWidth="130"/>
+                        <ColumnConstraints hgrow="ALWAYS"/>
+                        <ColumnConstraints minWidth="90" prefWidth="90"/>
+                    </columnConstraints>
+
+                    <!-- Row 0: Broker Details (Name + Hosts + Add/Update/Del) -->
+                    <Label text="Broker Details:" GridPane.rowIndex="0" GridPane.columnIndex="0"
+                           style="-fx-text-fill: #ecf0f1; -fx-font-weight: bold; -fx-font-size: 12px;"/>
+                    <HBox spacing="8" alignment="CENTER_LEFT" GridPane.rowIndex="0" GridPane.columnIndex="1">
+                        <TextField fx:id="brokerNameField" promptText="Name (e.g., POD1)" prefWidth="120"/>
+                        <TextField fx:id="brokerServersField" promptText="host1:9092,host2:9092" HBox.hgrow="ALWAYS"/>
+                        <Button fx:id="addBrokerButton" text="Add" onAction="#handleAddBroker"
+                                styleClass="btn-green" style="-fx-font-size: 11px;"/>
+                        <Button fx:id="updateBrokerButton" text="Update" onAction="#handleUpdateBroker"
+                                styleClass="btn-blue" style="-fx-font-size: 11px;"/>
+                        <Button fx:id="deleteBrokerButton" text="Delete" onAction="#handleDeleteBroker"
+                                style="-fx-font-size: 11px; -fx-background-color: #c0392b; -fx-text-fill: white;"/>
+                    </HBox>
+
+                    <!-- Row 1: SSL/TLS Configuration (Collapsible) -->
+                    <HBox spacing="10" alignment="CENTER_LEFT" GridPane.rowIndex="1" GridPane.columnIndex="1">
+                        <TitledPane fx:id="sslConfigPane" text="SSL/TLS Configuration (Optional)" expanded="false" collapsible="true"
+                                    HBox.hgrow="ALWAYS" prefWidth="800">
+                            <VBox spacing="8" style="-fx-padding: 8;">
+                                <!-- Security Protocol -->
+                                <HBox spacing="10" alignment="CENTER_LEFT">
+                                    <Label text="Security Protocol:" minWidth="130"/>
+                                    <ComboBox fx:id="sslSecurityProtocolCombo" promptText="PLAINTEXT" prefWidth="180">
+                                        <items>
+                                            <FXCollections fx:factory="observableArrayList">
+                                                <String fx:value="PLAINTEXT"/>
+                                                <String fx:value="SSL"/>
+                                                <String fx:value="SASL_PLAINTEXT"/>
+                                                <String fx:value="SASL_SSL"/>
+                                            </FXCollections>
+                                        </items>
+                                    </ComboBox>
+                                    <CheckBox fx:id="sslEnabledCheckBox" text="Enable SSL/TLS" style="-fx-text-fill: #333;"/>
+                                </HBox>
+
+                                <!-- Truststore Section -->
+                                <Label text="Truststore (Server Authentication):" style="-fx-font-weight: bold; -fx-font-size: 11px;"/>
+                                <HBox spacing="8" alignment="CENTER_LEFT">
+                                    <Label text="Location:" minWidth="80"/>
+                                    <TextField fx:id="sslTruststoreLocationField" promptText="/path/to/truststore.jks" HBox.hgrow="ALWAYS"/>
+                                    <Button text="Browse..." onAction="#handleBrowseTruststore" style="-fx-font-size: 11px;"/>
+                                </HBox>
+                                <HBox spacing="8" alignment="CENTER_LEFT">
+                                    <Label text="Password:" minWidth="80"/>
+                                    <PasswordField fx:id="sslTruststorePasswordField" promptText="Truststore password" prefWidth="200"/>
+                                    <Label text="Type:" minWidth="50"/>
+                                    <ComboBox fx:id="sslTruststoreTypeCombo" promptText="JKS" prefWidth="100">
+                                        <items>
+                                            <FXCollections fx:factory="observableArrayList">
+                                                <String fx:value="JKS"/>
+                                                <String fx:value="PKCS12"/>
+                                            </FXCollections>
+                                        </items>
+                                    </ComboBox>
+                                </HBox>
+
+                                <!-- Keystore Section (Mutual TLS) -->
+                                <Label text="Keystore (Client Authentication - Mutual TLS, Optional):" style="-fx-font-weight: bold; -fx-font-size: 11px;"/>
+                                <HBox spacing="8" alignment="CENTER_LEFT">
+                                    <Label text="Location:" minWidth="80"/>
+                                    <TextField fx:id="sslKeystoreLocationField" promptText="/path/to/keystore.jks (optional)" HBox.hgrow="ALWAYS"/>
+                                    <Button text="Browse..." onAction="#handleBrowseKeystore" style="-fx-font-size: 11px;"/>
+                                </HBox>
+                                <HBox spacing="8" alignment="CENTER_LEFT">
+                                    <Label text="Password:" minWidth="80"/>
+                                    <PasswordField fx:id="sslKeystorePasswordField" promptText="Keystore password" prefWidth="200"/>
+                                    <Label text="Type:" minWidth="50"/>
+                                    <ComboBox fx:id="sslKeystoreTypeCombo" promptText="JKS" prefWidth="100">
+                                        <items>
+                                            <FXCollections fx:factory="observableArrayList">
+                                                <String fx:value="JKS"/>
+                                                <String fx:value="PKCS12"/>
+                                            </FXCollections>
+                                        </items>
+                                    </ComboBox>
+                                </HBox>
+                                <HBox spacing="8" alignment="CENTER_LEFT">
+                                    <Label text="Key Password:" minWidth="80"/>
+                                    <PasswordField fx:id="sslKeyPasswordField" promptText="Private key password (if different)" prefWidth="280"/>
+                                </HBox>
+
+                                <!-- Endpoint Identification -->
+                                <HBox spacing="10" alignment="CENTER_LEFT">
+                                    <Label text="Endpoint ID Algorithm:" minWidth="130"/>
+                                    <ComboBox fx:id="sslEndpointAlgorithmCombo" promptText="https" prefWidth="150">
+                                        <items>
+                                            <FXCollections fx:factory="observableArrayList">
+                                                <String fx:value="https"/>
+                                                <String fx:value=""/>
+                                            </FXCollections>
+                                        </items>
+                                    </ComboBox>
+                                    <Label text="(empty = disable hostname verification)" style="-fx-font-size: 10px; -fx-text-fill: #666;"/>
+                                </HBox>
+
+                                <!-- SSL Status Label -->
+                                <Label fx:id="sslConfigStatusLabel" text="" style="-fx-font-size: 11px; -fx-text-fill: #27ae60;"/>
+                            </VBox>
+                        </TitledPane>
+                    </HBox>
+
+                    <!-- Row 2: Maven dependency -->
+                    <Label text="Maven Dependency:" GridPane.rowIndex="2" GridPane.columnIndex="0"
+                           style="-fx-text-fill: #ecf0f1; -fx-font-weight: bold; -fx-font-size: 12px;"/>
+                    <HBox spacing="10" alignment="CENTER_LEFT" GridPane.rowIndex="2" GridPane.columnIndex="1">
+                        <TextField fx:id="mavenDependencyField"
+                                   promptText="groupId:artifactId:version"
+                                   HBox.hgrow="ALWAYS"/>
+                        <Button text="Download" onAction="#handleDownloadDependency"
+                                styleClass="btn-blue" style="-fx-font-size: 12px;"/>
+                    </HBox>
+
+                    <!-- Row 3: Maven Repo URL -->
+                    <Label text="Maven Repo URL:" GridPane.rowIndex="3" GridPane.columnIndex="0"
+                           style="-fx-text-fill: #ecf0f1; -fx-font-weight: bold; -fx-font-size: 12px;"/>
+                    <HBox spacing="10" alignment="CENTER_LEFT" GridPane.rowIndex="3" GridPane.columnIndex="1">
+                        <TextField fx:id="mavenRepoUrlField"
+                                   promptText="https://your-repo/maven2/ (optional, leave blank for Maven Central)"
+                                   HBox.hgrow="ALWAYS"/>
+                    </HBox>
+
+                    <!-- Row 4: Configuration -->
+                    <Label text="Configuration:" GridPane.rowIndex="4" GridPane.columnIndex="0"
+                           style="-fx-text-fill: #ecf0f1; -fx-font-weight: bold; -fx-font-size: 12px;"/>
+                    <HBox spacing="10" alignment="CENTER_LEFT" GridPane.rowIndex="4" GridPane.columnIndex="1">
+                        <ComboBox fx:id="configsCombo" promptText="Select saved config" prefWidth="200"/>
+                        <Button text="Load" onAction="#handleLoadConfig" styleClass="btn-green"/>
+                        <Button text="Save" onAction="#handleSaveConfig" styleClass="btn-green"/>
+                        <Button text="Delete" onAction="#handleDeleteConfig"
+                                style="-fx-font-size: 11px; -fx-background-color: #c0392b; -fx-text-fill: white;"/>
+                    </HBox>
+                </GridPane>
+            </TitledPane>
 
         </VBox>
     </top>
@@ -186,161 +198,166 @@
                 <!-- ===== TAB 1: Search ===== -->
                 <Tab text="🔍  Search">
                     <BorderPane>
-                        <!-- Scrollable parameters in center -->
+                        <!-- Split pane: params left 45%, results right 55% -->
                         <center>
-                            <ScrollPane fitToWidth="true">
-                                <VBox spacing="10" style="-fx-padding: 12;">
-                                <TitledPane text="Search Parameters" expanded="true" collapsible="false">
-                                    <GridPane hgap="10" vgap="8" style="-fx-padding: 10;">
-                                        <fx:define>
-                                            <ToggleGroup fx:id="searchPartitionGroup"/>
-                                            <ToggleGroup fx:id="searchTimeGroup"/>
-                                        </fx:define>
-                                        <columnConstraints>
-                                            <ColumnConstraints minWidth="160" prefWidth="160"/>
-                                            <ColumnConstraints hgrow="ALWAYS"/>
-                                        </columnConstraints>
+                            <SplitPane dividerPositions="0.7" orientation="HORIZONTAL" SplitPane.resizableWithParent="true">
+                                <!-- LEFT: Scrollable search parameters -->
+                                <ScrollPane fitToWidth="true" minWidth="320">
+                                    <VBox spacing="10" style="-fx-padding: 12;">
+                                    <TitledPane text="Search Parameters" expanded="true" collapsible="false"
+                                                style="-fx-background-color: #ecf0f1; -fx-text-fill: #2c3e50;">
+                                        <GridPane hgap="10" vgap="8" style="-fx-padding: 10;">
+                                            <fx:define>
+                                                <ToggleGroup fx:id="searchPartitionGroup"/>
+                                                <ToggleGroup fx:id="searchTimeGroup"/>
+                                            </fx:define>
+                                            <columnConstraints>
+                                                <ColumnConstraints minWidth="160" prefWidth="160"/>
+                                                <ColumnConstraints hgrow="ALWAYS"/>
+                                            </columnConstraints>
 
-                                        <Label text="Topic: *" GridPane.rowIndex="0" GridPane.columnIndex="0"/>
-                                        <HBox spacing="5" alignment="CENTER_LEFT" GridPane.rowIndex="0" GridPane.columnIndex="1">
-                                            <ComboBox fx:id="searchTopicComboBox" promptText="Select or type topic" prefWidth="300" editable="true"/>
-                                        </HBox>
+                                            <Label text="Topic: *" GridPane.rowIndex="0" GridPane.columnIndex="0"/>
+                                            <HBox spacing="5" alignment="CENTER_LEFT" GridPane.rowIndex="0" GridPane.columnIndex="1">
+                                                <ComboBox fx:id="searchTopicComboBox" promptText="Select or type topic" prefWidth="300" editable="true"/>
+                                            </HBox>
 
-                                        <Label text="Search Text:" GridPane.rowIndex="1" GridPane.columnIndex="0"/>
-                                        <HBox spacing="6" alignment="CENTER_LEFT" GridPane.rowIndex="1" GridPane.columnIndex="1">
-                                            <TextField fx:id="searchTextFilter" promptText="term 1 (optional)"
-                                                       HBox.hgrow="ALWAYS"/>
-                                            <ComboBox fx:id="searchOperatorCombo" prefWidth="70"/>
-                                            <TextField fx:id="searchTextFilter2" promptText="term 2 (optional)"
-                                                       HBox.hgrow="ALWAYS"/>
-                                        </HBox>
+                                            <Label text="Search Filter:" GridPane.rowIndex="1" GridPane.columnIndex="0"/>
+                                            <HBox spacing="6" alignment="CENTER_LEFT" GridPane.rowIndex="1" GridPane.columnIndex="1">
+                                                <TextField fx:id="searchTextFilter"
+                                                           promptText="{a,b}=AND (curly)  [a,b]=OR (square)  plain=substring"
+                                                           HBox.hgrow="ALWAYS"/>
+                                            </HBox>
 
-                                        <Label text="Partition:" GridPane.rowIndex="2" GridPane.columnIndex="0"/>
-                                        <HBox spacing="10" alignment="CENTER_LEFT" GridPane.rowIndex="2" GridPane.columnIndex="1">
-                                            <RadioButton fx:id="searchAllPartitions" text="All" selected="true"
-                                                         toggleGroup="$searchPartitionGroup"/>
-                                            <RadioButton fx:id="searchSpecificPartition" text="Specific:"
-                                                         toggleGroup="$searchPartitionGroup"/>
-                                            <ComboBox fx:id="searchPartitionField" promptText="partition #" prefWidth="100"
-                                                       disable="true" editable="true"/>
-                                            <Label text="Offset:" disable="true" fx:id="offsetLabel"/>
-                                            <TextField fx:id="sourceOffsetField" promptText="optional — leave empty for latest" prefWidth="220"
-                                                       disable="true"/>
-                                        </HBox>
+                                            <Label text="Partition:" GridPane.rowIndex="2" GridPane.columnIndex="0"/>
+                                            <HBox spacing="10" alignment="CENTER_LEFT" GridPane.rowIndex="2" GridPane.columnIndex="1">
+                                                <RadioButton fx:id="searchAllPartitions" text="All" selected="true"
+                                                             toggleGroup="$searchPartitionGroup"/>
+                                                <RadioButton fx:id="searchSpecificPartition" text="Specific:"
+                                                             toggleGroup="$searchPartitionGroup"/>
+                                                <ComboBox fx:id="searchPartitionField" promptText="partition #" prefWidth="100"
+                                                           disable="true" editable="true"/>
+                                                <Label text="Offset:" disable="true" fx:id="offsetLabel"/>
+                                                <TextField fx:id="sourceOffsetField" promptText="optional — leave empty for latest" prefWidth="220"
+                                                           disable="true"/>
+                                            </HBox>
 
-                                        <Label text="Time Range:" GridPane.rowIndex="3" GridPane.columnIndex="0"/>
-                                        <HBox spacing="10" alignment="CENTER_LEFT" GridPane.rowIndex="3" GridPane.columnIndex="1">
-                                            <RadioButton fx:id="searchNoTimeRange" text="No filter" selected="true"
-                                                         toggleGroup="$searchTimeGroup"/>
-                                            <RadioButton fx:id="searchWithTimeRange" text="Time range:"
-                                                         toggleGroup="$searchTimeGroup"/>
-                                        </HBox>
+                                            <Label text="Time Range:" GridPane.rowIndex="3" GridPane.columnIndex="0"/>
+                                            <HBox spacing="10" alignment="CENTER_LEFT" GridPane.rowIndex="3" GridPane.columnIndex="1">
+                                                <RadioButton fx:id="searchNoTimeRange" text="No filter" selected="true"
+                                                             toggleGroup="$searchTimeGroup"/>
+                                                <RadioButton fx:id="searchWithTimeRange" text="Time range:"
+                                                             toggleGroup="$searchTimeGroup"/>
+                                            </HBox>
 
-                                        <Label text="From:" GridPane.rowIndex="4" GridPane.columnIndex="0"/>
-                                        <HBox fx:id="searchFromTimeBox" spacing="5" alignment="CENTER_LEFT"
-                                              GridPane.rowIndex="4" GridPane.columnIndex="1" disable="true">
-                                            <DatePicker fx:id="searchFromDatePicker" prefWidth="140" promptText="From date"/>
-                                            <Spinner fx:id="searchFromHourSpinner" prefWidth="58" editable="true"/>
-                                            <Label text="h"/>
-                                            <Spinner fx:id="searchFromMinuteSpinner" prefWidth="58" editable="true"/>
-                                            <Label text="m"/>
-                                        </HBox>
+                                            <Label text="From:" GridPane.rowIndex="4" GridPane.columnIndex="0"/>
+                                            <HBox fx:id="searchFromTimeBox" spacing="5" alignment="CENTER_LEFT"
+                                                  GridPane.rowIndex="4" GridPane.columnIndex="1" disable="true">
+                                                <DatePicker fx:id="searchFromDatePicker" prefWidth="140" promptText="From date"/>
+                                                <Spinner fx:id="searchFromHourSpinner" prefWidth="58" editable="true"/>
+                                                <Label text="h"/>
+                                                <Spinner fx:id="searchFromMinuteSpinner" prefWidth="58" editable="true"/>
+                                                <Label text="m"/>
+                                            </HBox>
 
-                                        <Label text="To:" GridPane.rowIndex="5" GridPane.columnIndex="0"/>
-                                        <HBox fx:id="searchToTimeBox" spacing="5" alignment="CENTER_LEFT"
-                                              GridPane.rowIndex="5" GridPane.columnIndex="1" disable="true">
-                                            <DatePicker fx:id="searchToDatePicker" prefWidth="140" promptText="To date"/>
-                                            <Spinner fx:id="searchToHourSpinner" prefWidth="58" editable="true"/>
-                                            <Label text="h"/>
-                                            <Spinner fx:id="searchToMinuteSpinner" prefWidth="58" editable="true"/>
-                                            <Label text="m"/>
-                                        </HBox>
+                                            <Label text="To:" GridPane.rowIndex="5" GridPane.columnIndex="0"/>
+                                            <HBox fx:id="searchToTimeBox" spacing="5" alignment="CENTER_LEFT"
+                                                  GridPane.rowIndex="5" GridPane.columnIndex="1" disable="true">
+                                                <DatePicker fx:id="searchToDatePicker" prefWidth="140" promptText="To date"/>
+                                                <Spinner fx:id="searchToHourSpinner" prefWidth="58" editable="true"/>
+                                                <Label text="h"/>
+                                                <Spinner fx:id="searchToMinuteSpinner" prefWidth="58" editable="true"/>
+                                                <Label text="m"/>
+                                            </HBox>
 
-                                        <Label text="Max Results:" GridPane.rowIndex="6" GridPane.columnIndex="0"/>
-                                        <TextField fx:id="searchMaxResults" promptText="100  (used by Search All only)"
-                                                   GridPane.rowIndex="6" GridPane.columnIndex="1"/>
+                                            <Label text="Max Results:" GridPane.rowIndex="6" GridPane.columnIndex="0"/>
+                                            <TextField fx:id="searchMaxResults" promptText="100  (used by Search All only)"
+                                                       GridPane.rowIndex="6" GridPane.columnIndex="1"/>
 
-                                        <Label text="Key Deserializer:" GridPane.rowIndex="7" GridPane.columnIndex="0"/>
-                                        <TextField fx:id="sourceKeyDeserializerField"
-                                                   promptText="org.apache.kafka.common.serialization.StringDeserializer"
-                                                   GridPane.rowIndex="7" GridPane.columnIndex="1"/>
+                                            <Label text="Key Deserializer:" GridPane.rowIndex="7" GridPane.columnIndex="0"/>
+                                            <TextField fx:id="sourceKeyDeserializerField"
+                                                       promptText="org.apache.kafka.common.serialization.StringDeserializer"
+                                                       GridPane.rowIndex="7" GridPane.columnIndex="1"/>
 
-                                        <Label text="Value Deserializer:" GridPane.rowIndex="8" GridPane.columnIndex="0"/>
-                                        <TextField fx:id="searchValueDeserializerField"
-                                                   promptText="org.apache.kafka.common.serialization.StringDeserializer"
-                                                   GridPane.rowIndex="8" GridPane.columnIndex="1"/>
+                                            <Label text="Value Deserializer:" GridPane.rowIndex="8" GridPane.columnIndex="0"/>
+                                            <TextField fx:id="searchValueDeserializerField"
+                                                       promptText="org.apache.kafka.common.serialization.StringDeserializer"
+                                                       GridPane.rowIndex="8" GridPane.columnIndex="1"/>
 
-                                        <CheckBox fx:id="decodeAsFlatbufCheck"
-                                                  text="Decode value as FlatBuffers"
-                                                  GridPane.rowIndex="9" GridPane.columnIndex="1"/>
+                                            <CheckBox fx:id="decodeAsFlatbufCheck"
+                                                      text="Decode value as FlatBuffers"
+                                                      GridPane.rowIndex="9" GridPane.columnIndex="1"/>
 
-                                        <Label text="FlatBuf Class Name:" GridPane.rowIndex="10" GridPane.columnIndex="0"/>
-                                        <TextField fx:id="searchFlatbufClassNameField"
-                                                   promptText="com.example.MyTable  (optional, for FlatBuffers decode)"
-                                                   GridPane.rowIndex="10" GridPane.columnIndex="1"/>
+                                            <Label text="FlatBuf Class Name:" GridPane.rowIndex="10" GridPane.columnIndex="0"/>
+                                            <TextField fx:id="searchFlatbufClassNameField"
+                                                       promptText="com.example.MyTable  (optional, for FlatBuffers decode)"
+                                                       GridPane.rowIndex="10" GridPane.columnIndex="1"/>
 
-                                        <HBox fx:id="searchFromBeginningBox" spacing="8" alignment="CENTER_LEFT"
-                                              GridPane.rowIndex="11" GridPane.columnIndex="1"
-                                              visible="true" managed="true">
-                                            <CheckBox fx:id="searchFromBeginningCheck" text="Search from beginning"/>
-                                            <Label text="⚠ Very slow — scans all messages from earliest offset"
-                                                   style="-fx-text-fill: #e67e22; -fx-font-size: 11px;"/>
-                                        </HBox>
-                                    </GridPane>
-                                </TitledPane>
+                                            <HBox fx:id="searchFromBeginningBox" spacing="8" alignment="CENTER_LEFT"
+                                                  GridPane.rowIndex="11" GridPane.columnIndex="1"
+                                                  visible="true" managed="true">
+                                                <CheckBox fx:id="searchFromBeginningCheck" text="Search from beginning"/>
+                                                <Label text="⚠ Very slow — scans all messages from earliest offset"
+                                                       style="-fx-text-fill: #e67e22; -fx-font-size: 11px;"/>
+                                            </HBox>
+                                        </GridPane>
+                                    </TitledPane>
+                                    </VBox>
+                                </ScrollPane>
 
-                                </VBox>
-                            </ScrollPane>
-                        </center>
-                        <!-- Action bar + Results always visible at bottom -->
-                        <bottom>
-                            <VBox>
-                                <!-- Action bar -->
-                                <HBox spacing="10" style="-fx-padding: 8 12 8 12; -fx-background-color: #f8f8f8; -fx-border-color: #ddd; -fx-border-width: 1 0 0 0;" alignment="CENTER_LEFT">
-                                    <Button fx:id="searchButton" text="🔍  Search All" onAction="#handleSearch"
-                                            styleClass="btn-purple" style="-fx-font-size: 13px; -fx-padding: 8 20;"/>
-                                    <Button fx:id="stopSearchButton" text="⏹ Stop" onAction="#handleStopSearch"
-                                            styleClass="btn-red" style="-fx-font-size: 13px; -fx-padding: 8 16;" disable="true"/>
-                                    <Button fx:id="peekOneButton" text="↓ Peek One" onAction="#handlePeekOne"
-                                            styleClass="btn-green" style="-fx-font-size: 13px; -fx-padding: 8 20;">
-                                        <tooltip><Tooltip text="Fetch one message (latest, or at specified offset when Specific partition is selected)"/></tooltip>
-                                    </Button>
-                                    <Button fx:id="startTailButton" text="⟳ Live Tail" onAction="#handleStartTail"
-                                            styleClass="btn-blue" style="-fx-font-size: 13px; -fx-padding: 8 20;">
-                                        <tooltip><Tooltip text="Poll for new messages every 5s — newest first. Stops after 200 messages or 5 minutes."/></tooltip>
-                                    </Button>
-                                    <Region HBox.hgrow="ALWAYS"/>
-                                    <Label fx:id="searchStatusLabel" text="" style="-fx-font-size: 12px; -fx-text-fill: #555;"/>
-                                    <Button fx:id="toggleSearchResultsButton" text="▲ Results" onAction="#handleToggleSearchResults"
-                                            style="-fx-font-size: 11px; -fx-padding: 6 12;"/>
-                                    <Button text="Export" onAction="#handleExportSearchResults"
-                                            style="-fx-font-size: 11px; -fx-padding: 6 12;"/>
-                                </HBox>
-                                <!-- Results -->
-                                <VBox fx:id="searchResultsBox" spacing="6" style="-fx-padding: 10;" prefHeight="250" minHeight="150" visible="false" managed="false">
-                                    <Label text="Results" style="-fx-font-size: 13px; -fx-font-weight: bold;"/>
-                                    <TextArea fx:id="searchResultsArea" editable="false" VBox.vgrow="ALWAYS" prefRowCount="10"
+                                <!-- RIGHT: Results pane -->
+                                <VBox spacing="0" minWidth="200" SplitPane.resizableWithParent="true">
+                                    <!-- Results header -->
+                                    <HBox spacing="8" alignment="CENTER_LEFT"
+                                          style="-fx-padding: 6 10 6 10; -fx-background-color: #f0f0f0; -fx-border-color: #ccc; -fx-border-width: 0 0 1 0;">
+                                        <Label text="Results" style="-fx-font-size: 13px; -fx-font-weight: bold;"/>
+                                        <Region HBox.hgrow="ALWAYS"/>
+                                        <Button fx:id="copySearchResultsButton" text="📋 Copy All"
+                                                onAction="#handleCopySearchResults"
+                                                style="-fx-font-size: 11px; -fx-padding: 4 10;"/>
+                                        <Button text="Export" onAction="#handleExportSearchResults"
+                                                style="-fx-font-size: 11px; -fx-padding: 4 10;"/>
+                                    </HBox>
+                                    <TextArea fx:id="searchResultsArea" editable="false"
+                                              VBox.vgrow="ALWAYS"
                                               style="-fx-font-family: 'Courier New'; -fx-font-size: 11px;"
-                                              promptText="Results will appear here…"/>
+                                              promptText="Results will appear here…"
+                                              wrapText="false"/>
                                 </VBox>
-                            </VBox>
+                            </SplitPane>
+                        </center>
+                        <!-- Action bar at bottom -->
+                        <bottom>
+                            <HBox spacing="10" style="-fx-padding: 8 12 8 12; -fx-background-color: #f8f8f8; -fx-border-color: #ddd; -fx-border-width: 1 0 0 0;" alignment="CENTER_LEFT">
+                                <Button fx:id="searchButton" text="🔍  Search All" onAction="#handleSearch"
+                                        styleClass="btn-purple" style="-fx-font-size: 13px; -fx-padding: 8 20;"/>
+                                <Button fx:id="stopSearchButton" text="⏹ Stop" onAction="#handleStopSearch"
+                                        styleClass="btn-red" style="-fx-font-size: 13px; -fx-padding: 8 16;" disable="true"/>
+                                <Button fx:id="peekOneButton" text="↓ Peek One" onAction="#handlePeekOne"
+                                        styleClass="btn-green" style="-fx-font-size: 13px; -fx-padding: 8 20;">
+                                    <tooltip><Tooltip text="Fetch one message (latest, or at specified offset when Specific partition is selected)"/></tooltip>
+                                </Button>
+                                <Button fx:id="startTailButton" text="⟳ Live Tail" onAction="#handleStartTail"
+                                        styleClass="btn-blue" style="-fx-font-size: 13px; -fx-padding: 8 20;">
+                                    <tooltip><Tooltip text="Poll for new messages every 5s — newest first. Stops after 200 messages or 5 minutes."/></tooltip>
+                                </Button>
+                                <Region HBox.hgrow="ALWAYS"/>
+                                <Label fx:id="searchStatusLabel" text="" style="-fx-font-size: 12px; -fx-text-fill: #555;"/>
+                            </HBox>
                         </bottom>
                     </BorderPane>
                 </Tab>
 
                 <!-- ===== TAB 2: Push Messages ===== -->
                 <Tab text="📤  Push Messages">
-                    <VBox>
-                        <ScrollPane fitToWidth="true" VBox.vgrow="ALWAYS">
-                            <VBox spacing="12" style="-fx-padding: 15;">
+                    <BorderPane>
+                        <center>
+                            <SplitPane dividerPositions="0.65" orientation="HORIZONTAL" SplitPane.resizableWithParent="true">
+                                <!-- LEFT: Configuration fields (35%) -->
+                                <ScrollPane fitToWidth="true" fitToHeight="true">
+                                    <VBox spacing="12" style="-fx-padding: 15;">
 
-                                <TitledPane text="Message Template (JSON)" expanded="true" collapsible="false">
-                                    <VBox spacing="5" style="-fx-padding: 10;">
-                                        <TextArea fx:id="pushMessageTemplateArea" prefRowCount="7"/>
-                                    </VBox>
-                                </TitledPane>
-
-                                <TitledPane text="Destination &amp; Serializer" expanded="true" collapsible="false">
+                                        <TitledPane text="Destination &amp; Serializer" expanded="true" collapsible="true"
+                                                    style="-fx-background-color: #ecf0f1; -fx-text-fill: #2c3e50;">
                                     <GridPane hgap="10" vgap="8" style="-fx-padding: 10;">
                                         <columnConstraints>
                                             <ColumnConstraints minWidth="170" prefWidth="170"/>
@@ -379,7 +396,8 @@
                                     </GridPane>
                                 </TitledPane>
 
-                                <TitledPane text="Target Partition and Key" expanded="true" collapsible="false">
+                                <TitledPane text="Target Partition and Key" expanded="false" collapsible="true"
+                                            style="-fx-background-color: #ecf0f1; -fx-text-fill: #2c3e50;">
                                     <VBox spacing="8" style="-fx-padding: 10;">
                                         <fx:define>
                                             <ToggleGroup fx:id="partitionKeyGroup"/>
@@ -407,7 +425,8 @@
                                     </VBox>
                                 </TitledPane>
 
-                                <TitledPane text="Test Configuration" expanded="true" collapsible="false">
+                                <TitledPane text="Test Configuration" expanded="false" collapsible="true"
+                                            style="-fx-background-color: #ecf0f1; -fx-text-fill: #2c3e50;">
                                     <GridPane hgap="10" vgap="8" style="-fx-padding: 10;">
                                         <columnConstraints>
                                             <ColumnConstraints minWidth="170" prefWidth="170"/>
@@ -428,7 +447,8 @@
                                     </GridPane>
                                 </TitledPane>
 
-                                <TitledPane text="Field Manipulation" expanded="true" collapsible="false">
+                                <TitledPane text="Field Manipulation" expanded="false" collapsible="true"
+                                            style="-fx-background-color: #ecf0f1; -fx-text-fill: #2c3e50;">
                                     <VBox spacing="10" style="-fx-padding: 10;">
 
                                         <!-- Auto-Increment -->
@@ -478,29 +498,50 @@
                             </VBox>
                         </ScrollPane>
 
-                        <!-- Push action bar -->
-                        <VBox spacing="6" style="-fx-padding: 10 15 8 15; -fx-background-color: #f0f0f0; -fx-border-color: #ddd; -fx-border-width: 1 0 0 0;">
-                            <HBox spacing="15" alignment="CENTER_LEFT">
-                                <Button fx:id="startButton" text="▶  Start Pushing" onAction="#handleStart"
-                                       styleClass="btn-green" style="-fx-font-size: 13px; -fx-padding: 8 24;"/>
-                                <Button fx:id="stopButton" text="■  Stop Pushing" onAction="#handleStop"
-                                       styleClass="btn-red" style="-fx-font-size: 13px; -fx-padding: 8 24;"/>
-                                <Region HBox.hgrow="ALWAYS"/>
-                                <Label fx:id="statusLabel" text="Status: Idle" style="-fx-font-size: 12px;"/>
-                            </HBox>
-                            <ProgressBar fx:id="progressBar" prefWidth="Infinity" prefHeight="14"/>
-                        </VBox>
-                    </VBox>
+                            <!-- RIGHT: Message Template (35% - full right side) -->
+                            <ScrollPane fitToWidth="true" fitToHeight="true">
+                                <AnchorPane>
+                                    <TitledPane text="Message Template (JSON)" expanded="true" collapsible="false"
+                                                style="-fx-background-color: #ecf0f1; -fx-text-fill: #2c3e50; -fx-padding: 0;"
+                                                AnchorPane.topAnchor="0" AnchorPane.bottomAnchor="0"
+                                                AnchorPane.leftAnchor="0" AnchorPane.rightAnchor="0">
+                                        <AnchorPane>
+                                            <TextArea fx:id="pushMessageTemplateArea"
+                                                      AnchorPane.topAnchor="0" AnchorPane.bottomAnchor="0"
+                                                      AnchorPane.leftAnchor="0" AnchorPane.rightAnchor="0"/>
+                                        </AnchorPane>
+                                    </TitledPane>
+                                </AnchorPane>
+                            </ScrollPane>
+                        </SplitPane>
+                        </center>
+
+                        <bottom>
+                            <VBox spacing="6" style="-fx-padding: 10 15 8 15; -fx-background-color: #f0f0f0; -fx-border-color: #ddd; -fx-border-width: 1 0 0 0;">
+                                <HBox spacing="15" alignment="CENTER_LEFT">
+                                    <Button fx:id="startButton" text="▶  Start Pushing" onAction="#handleStart"
+                                           styleClass="btn-green" style="-fx-font-size: 13px; -fx-padding: 8 24;"/>
+                                    <Button fx:id="stopButton" text="■  Stop Pushing" onAction="#handleStop"
+                                           styleClass="btn-red" style="-fx-font-size: 13px; -fx-padding: 8 24;"/>
+                                    <Region HBox.hgrow="ALWAYS"/>
+                                    <Label fx:id="statusLabel" text="Status: Idle" style="-fx-font-size: 12px;"/>
+                                </HBox>
+                                <ProgressBar fx:id="progressBar" prefWidth="Infinity" prefHeight="14"/>
+                            </VBox>
+                        </bottom>
+                    </BorderPane>
                 </Tab>
 
                 <!-- ===== TAB 3: Verify Consumption ===== -->
                 <Tab text="✅  Verify Consumption">
-                    <BorderPane>
-                        <center>
+                    <VBox VBox.vgrow="ALWAYS">
+                        <SplitPane dividerPositions="0.65" orientation="HORIZONTAL" VBox.vgrow="ALWAYS">
+                            <!-- LEFT: Consumer Group & Topic (65%) -->
                             <ScrollPane fitToWidth="true">
                                 <VBox spacing="12" style="-fx-padding: 15;">
 
-                                    <TitledPane text="Consumer Group &amp; Topic *" expanded="true" collapsible="false">
+                                    <TitledPane text="Consumer Group &amp; Topic *" expanded="true" collapsible="false"
+                                                style="-fx-background-color: #ecf0f1; -fx-text-fill: #2c3e50;">
                                         <VBox spacing="8" style="-fx-padding: 10;">
                                             <GridPane hgap="10" vgap="8">
                                                 <columnConstraints>
@@ -536,7 +577,34 @@
                                         </VBox>
                                     </TitledPane>
 
-                                    <TitledPane text="Verification Timeout *" expanded="true" collapsible="false">
+                                </VBox>
+                            </ScrollPane>
+
+                            <!-- RIGHT: Partition & Timeout (35%) -->
+                            <ScrollPane fitToWidth="true">
+                                <VBox spacing="12" style="-fx-padding: 15;">
+
+                                    <TitledPane text="Partition → Target Offset (one per line: partition=offset)" expanded="true" collapsible="false"
+                                                style="-fx-background-color: #ecf0f1; -fx-text-fill: #2c3e50;">
+                                        <VBox spacing="6" style="-fx-padding: 10;">
+                                            <Label text="Auto-populated after a push run. Edit manually if needed."
+                                                   style="-fx-text-fill: #777; -fx-font-size: 11px;"/>
+                                            <TextArea fx:id="verifyPartitionOffsetsArea"
+                                                      promptText="e.g.  0=1000  (partition=offset, one per line)"
+                                                      prefRowCount="10"
+                                                      VBox.vgrow="ALWAYS"
+                                                      style="-fx-font-family: 'Courier New'; -fx-font-size: 12px;"/>
+                                            <HBox spacing="8">
+                                                <Button text="Auto-fill from Last Push" onAction="#handleAutoFillVerifyOffsets"
+                                                        styleClass="btn-blue" style="-fx-font-size: 11px; -fx-padding: 4 12;"/>
+                                                <Button text="Clear" onAction="#handleClearVerifyOffsets"
+                                                        style="-fx-font-size: 11px; -fx-padding: 4 12;"/>
+                                            </HBox>
+                                        </VBox>
+                                    </TitledPane>
+
+                                    <TitledPane text="Verification Timeout *" expanded="true" collapsible="false"
+                                                style="-fx-background-color: #ecf0f1; -fx-text-fill: #2c3e50;">
                                         <GridPane hgap="10" vgap="8" style="-fx-padding: 10;">
                                             <columnConstraints>
                                                 <ColumnConstraints minWidth="170" prefWidth="170"/>
@@ -553,39 +621,21 @@
                                         </GridPane>
                                     </TitledPane>
 
-                                    <TitledPane text="Partition → Target Offset (one per line: partition=offset)" expanded="true" collapsible="false">
-                                        <VBox spacing="6" style="-fx-padding: 10;">
-                                            <Label text="Auto-populated after a push run. Edit manually if needed."
-                                                   style="-fx-text-fill: #777; -fx-font-size: 11px;"/>
-                                            <TextArea fx:id="verifyPartitionOffsetsArea"
-                                                      promptText="e.g.  0=1000  (partition=offset, one per line)"
-                                                      prefRowCount="6"
-                                                      style="-fx-font-family: 'Courier New'; -fx-font-size: 12px;"/>
-                                            <HBox spacing="8">
-                                                <Button text="Auto-fill from Last Push" onAction="#handleAutoFillVerifyOffsets"
-                                                        styleClass="btn-blue" style="-fx-font-size: 11px; -fx-padding: 4 12;"/>
-                                                <Button text="Clear" onAction="#handleClearVerifyOffsets"
-                                                        style="-fx-font-size: 11px; -fx-padding: 4 12;"/>
-                                            </HBox>
-                                        </VBox>
-                                    </TitledPane>
-
                                 </VBox>
                             </ScrollPane>
-                        </center>
+                        </SplitPane>
 
-                        <bottom>
-                            <HBox spacing="12" style="-fx-padding: 8 12 8 12; -fx-background-color: #f8f8f8; -fx-border-color: #ddd; -fx-border-width: 1 0 0 0;" alignment="CENTER_LEFT">
-                                <Button fx:id="verifyStartButton" text="▶  Start Verification" onAction="#handleStartVerification"
-                                        styleClass="btn-green" style="-fx-font-size: 13px; -fx-padding: 8 20;"/>
-                                <Button fx:id="verifyStopButton" text="■  Stop" onAction="#handleStopVerification"
-                                        styleClass="btn-red" style="-fx-font-size: 13px; -fx-padding: 8 20;"
-                                        disable="true"/>
-                                <Region HBox.hgrow="ALWAYS"/>
-                                <Label fx:id="verifyStatusLabel" text="" style="-fx-font-size: 12px; -fx-text-fill: #555;"/>
-                            </HBox>
-                        </bottom>
-                    </BorderPane>
+                        <!-- Verify action bar -->
+                        <HBox spacing="12" style="-fx-padding: 8 12 8 12; -fx-background-color: #f8f8f8; -fx-border-color: #ddd; -fx-border-width: 1 0 0 0;" alignment="CENTER_LEFT">
+                            <Button fx:id="verifyStartButton" text="▶  Start Verification" onAction="#handleStartVerification"
+                                    styleClass="btn-green" style="-fx-font-size: 13px; -fx-padding: 8 20;"/>
+                            <Button fx:id="verifyStopButton" text="■  Stop" onAction="#handleStopVerification"
+                                    styleClass="btn-red" style="-fx-font-size: 13px; -fx-padding: 8 20;"
+                                    disable="true"/>
+                            <Region HBox.hgrow="ALWAYS"/>
+                            <Label fx:id="verifyStatusLabel" text="" style="-fx-font-size: 12px; -fx-text-fill: #555;"/>
+                        </HBox>
+                    </VBox>
                 </Tab>
 
                 <!-- ===== TAB 4: Topic Management ===== -->

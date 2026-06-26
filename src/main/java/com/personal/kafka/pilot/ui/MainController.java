@@ -151,8 +151,7 @@ public class MainController {
     // --- FXML Fields: Search Tab ---
     @FXML private ComboBox<String> searchTopicComboBox;
     @FXML private TextField searchTextFilter;
-    @FXML private TextField searchTextFilter2;
-    @FXML private ComboBox<String> searchOperatorCombo;
+    @FXML private Button copySearchResultsButton;
     @FXML private RadioButton searchAllPartitions;
     @FXML private RadioButton searchSpecificPartition;
     @FXML private ComboBox<String> searchPartitionField;
@@ -175,8 +174,6 @@ public class MainController {
     @FXML private TextField sourceKeyDeserializerField;
     @FXML private TextArea searchResultsArea;
     @FXML private Label searchStatusLabel;
-    @FXML private VBox searchResultsBox;
-    @FXML private Button toggleSearchResultsButton;
     @FXML private Button searchButton;
     @FXML private Button stopSearchButton;
     @FXML private Button peekOneButton;
@@ -504,9 +501,6 @@ public class MainController {
             protobufClassNameField.setDisable(flatbuf);
         });
 
-        searchOperatorCombo.getItems().addAll("AND", "OR");
-        searchOperatorCombo.setValue("AND");
-
         partitionKeySpecific.selectedProperty().addListener((obs, o, nv) -> {
             targetPartitionField.setDisable(!nv);
         });
@@ -767,6 +761,22 @@ public class MainController {
             if (newVal != null) {
                 brokerNameField.setText(newVal.getName());
                 brokerServersField.setText(newVal.getBootstrapServers());
+                // Auto-fill maven dependency across all tabs
+                if (newVal.getMavenDependency() != null && !newVal.getMavenDependency().isEmpty()) {
+                    mavenDependencyField.setText(newVal.getMavenDependency());
+                } else {
+                    mavenDependencyField.setText("");
+                }
+                String defaultTopic = newVal.getDefaultTopicName();
+                if (defaultTopic != null && !defaultTopic.isEmpty()) {
+                    searchTopicComboBox.setValue(defaultTopic);
+                    pushTopicComboBox.setValue(defaultTopic);
+                    verifyTopicComboBox.setValue(defaultTopic);
+                } else {
+                    searchTopicComboBox.setValue(null);
+                    pushTopicComboBox.setValue(null);
+                    verifyTopicComboBox.setValue(null);
+                }
                 // Load SSL configuration for this broker
                 loadSslConfigToUI(newVal);
                 String podName = newVal.getName();
@@ -981,8 +991,6 @@ public class MainController {
                 // Search Tab
                 .searchTopic(searchTopicComboBox.getValue())
                 .searchTextFilter(searchTextFilter.getText())
-                .searchTextFilter2(searchTextFilter2.getText())
-                .searchOperator(searchOperatorCombo.getValue())
                 .searchAllPartitions(searchAllPartitions.isSelected())
                 .searchSpecificPartitionValue(searchPartitionField.getValue())
                 .sourceOffset(sourceOffsetField.getText())
@@ -1056,8 +1064,6 @@ public class MainController {
         // Search Tab
         if (state.getSearchTopic() != null) searchTopicComboBox.setValue(state.getSearchTopic());
         if (state.getSearchTextFilter() != null) searchTextFilter.setText(state.getSearchTextFilter());
-        if (state.getSearchTextFilter2() != null) searchTextFilter2.setText(state.getSearchTextFilter2());
-        if (state.getSearchOperator() != null) searchOperatorCombo.setValue(state.getSearchOperator());
         if (state.isSearchAllPartitions()) {
             searchAllPartitions.setSelected(true);
         } else {
@@ -1132,12 +1138,8 @@ public class MainController {
      * Clears all result areas when switching pods.
      */
     private void clearAllResults() {
-        // Clear search results and hide the results box
         searchResultsArea.clear();
         searchResultsVisible = false;
-        searchResultsBox.setVisible(false);
-        searchResultsBox.setManaged(false);
-        toggleSearchResultsButton.setText("\u25b2 Show Results");
         searchStatusLabel.setText("Results cleared - pod switched");
 
         // Clear console output (optional - could keep it for history)
@@ -1221,8 +1223,6 @@ public class MainController {
         // Search Tab - clear to defaults
         searchTopicComboBox.setValue(null);
         searchTextFilter.clear();
-        searchTextFilter2.clear();
-        searchOperatorCombo.setValue("AND");
         searchAllPartitions.setSelected(true);
         searchPartitionField.setValue(null);
         sourceOffsetField.clear();
@@ -1267,7 +1267,7 @@ public class MainController {
 
         // Verify Tab - clear to defaults
         verifyTopicComboBox.setValue(null);
-        verifyTimeoutField.setText("30");
+        verifyTimeoutField.setText("10");
         verifyPartitionOffsetsArea.clear();
         selectedConsumerGroupsList.getItems().clear();
 
@@ -1290,9 +1290,13 @@ public class MainController {
             return;
         }
 
+        // Save maven dependency from general field to broker config
+        String mavenDep = mavenDependencyField != null ? mavenDependencyField.getText().trim() : null;
+
         KafkaBrokerConfig broker = KafkaBrokerConfig.builder()
                 .name(name)
                 .bootstrapServers(servers)
+                .mavenDependency(mavenDep != null && !mavenDep.isEmpty() ? mavenDep : null)
                 .build();
 
         // Add SSL configuration if enabled
@@ -1331,6 +1335,10 @@ public class MainController {
 
         selected.setName(name);
         selected.setBootstrapServers(servers);
+        
+        // Save maven dependency from general field to broker config
+        String mavenDep = mavenDependencyField != null ? mavenDependencyField.getText().trim() : null;
+        selected.setMavenDependency(mavenDep != null && !mavenDep.isEmpty() ? mavenDep : null);
 
         // Update SSL configuration
         populateSslConfig(selected);
@@ -2187,8 +2195,6 @@ public class MainController {
             if (stopSearchButton != null) stopSearchButton.setDisable(!inProgress);
             searchTopicComboBox.setDisable(inProgress);
             searchTextFilter.setDisable(inProgress);
-            searchTextFilter2.setDisable(inProgress);
-            searchOperatorCombo.setDisable(inProgress);
             searchAllPartitions.setDisable(inProgress);
             searchSpecificPartition.setDisable(inProgress);
             searchPartitionField.setDisable(inProgress || !searchSpecificPartition.isSelected());
@@ -2215,12 +2221,7 @@ public class MainController {
     }
 
     private void ensureSearchResultsVisible() {
-        if (!searchResultsVisible) {
-            searchResultsVisible = true;
-            searchResultsBox.setVisible(true);
-            searchResultsBox.setManaged(true);
-            toggleSearchResultsButton.setText("\u25bc Hide Results");
-        }
+        searchResultsVisible = true;
     }
 
     private Integer parsePartition(boolean requireOffset) {
@@ -2260,12 +2261,16 @@ public class MainController {
     }
 
     private String buildSearchFilter() {
-        String t1 = searchTextFilter.getText().trim();
-        String t2 = searchTextFilter2.getText().trim();
-        if (t1.isEmpty()) return "";
-        if (t2.isEmpty()) return t1;
-        String op = searchOperatorCombo.getValue();
-        return t1 + " " + (op != null ? op : "AND") + " " + t2;
+        return searchTextFilter.getText().trim();
+    }
+
+    @FXML
+    private void handleCopySearchResults() {
+        javafx.scene.input.Clipboard clipboard = javafx.scene.input.Clipboard.getSystemClipboard();
+        javafx.scene.input.ClipboardContent content = new javafx.scene.input.ClipboardContent();
+        content.putString(searchResultsArea.getText());
+        clipboard.setContent(content);
+        searchStatusLabel.setText("Copied to clipboard");
     }
 
     private boolean validateSearchInputs(String topic) {
@@ -2292,8 +2297,6 @@ public class MainController {
             // All input controls
             searchTopicComboBox.setDisable(inProgress);
             searchTextFilter.setDisable(inProgress);
-            searchTextFilter2.setDisable(inProgress);
-            searchOperatorCombo.setDisable(inProgress);
             searchAllPartitions.setDisable(inProgress);
             searchSpecificPartition.setDisable(inProgress);
             searchPartitionField.setDisable(inProgress || !searchSpecificPartition.isSelected());
@@ -2471,13 +2474,6 @@ public class MainController {
         }
     }
 
-    @FXML
-    private void handleToggleSearchResults() {
-        searchResultsVisible = !searchResultsVisible;
-        searchResultsBox.setVisible(searchResultsVisible);
-        searchResultsBox.setManaged(searchResultsVisible);
-        toggleSearchResultsButton.setText(searchResultsVisible ? "\u25bc Hide Results" : "\u25b2 Show Results");
-    }
 
     @FXML
     private void handleExportResults() {
@@ -2633,7 +2629,7 @@ public class MainController {
             try {
                 java.util.Properties props = new java.util.Properties();
                 props.put("bootstrap.servers", brokers);
-                props.put("request.timeout.ms", "30000");
+                props.put("request.timeout.ms", "600000");
                 props.put("connections.max.idle.ms", "10000");
 
                 // Apply SSL configuration if enabled
@@ -2677,7 +2673,7 @@ public class MainController {
                 adminClient = org.apache.kafka.clients.admin.AdminClient.create(props);
 
                 // List topics with increased timeout
-                java.util.Set<String> topics = adminClient.listTopics().names().get(30, java.util.concurrent.TimeUnit.SECONDS);
+                java.util.Set<String> topics = adminClient.listTopics().names().get(600, java.util.concurrent.TimeUnit.SECONDS);
 
                 java.util.List<String> sortedTopics = new java.util.ArrayList<>(topics);
                 java.util.Collections.sort(sortedTopics);
@@ -3522,6 +3518,11 @@ public class MainController {
                 .filter(b -> b.getName().equals(config.getSelectedBrokerName()))
                 .findFirst()
                 .ifPresent(broker -> {
+                    // Update the broker's maven dependency to match the configuration
+                    if (config.getMavenDependency() != null && !config.getMavenDependency().isEmpty()) {
+                        broker.setMavenDependency(config.getMavenDependency());
+                        saveBrokerConfigs();
+                    }
                     // Select in dropdown only - user must click Connect
                     selectedForWorkComboBox.setValue(broker);
                 });

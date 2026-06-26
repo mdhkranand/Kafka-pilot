@@ -27,6 +27,9 @@ public class KafkaBrokerConfig {
     private String sslKeystoreType;        // JKS, PKCS12 (default: JKS)
     private String sslEndpointIdentificationAlgorithm;  // https or empty (default: https)
 
+    private String mavenDependency;   // groupId:artifactId:version — auto-filled when broker selected
+    private String defaultTopicName;  // pre-fills all topic fields when broker is selected
+
     @Override
     public String toString() {
         if (bootstrapServers != null && !bootstrapServers.isEmpty()) {

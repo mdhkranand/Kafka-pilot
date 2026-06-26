@@ -43,7 +43,7 @@ public class KafkaTailService {
     private static final String DEFAULT_DESERIALIZER = "org.apache.kafka.common.serialization.StringDeserializer";
     private static final DateTimeFormatter DISPLAY_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
     private static final int MAX_MESSAGES = 200;
-    private static final long MAX_DURATION_MS = 5 * 60 * 1000L; // 5 minutes
+    private static final long MAX_DURATION_MS = 10 * 60 * 1000L; // 10 minutes
     private static final long POLL_INTERVAL_MS = 5_000L;
     private static final Duration POLL_TIMEOUT = Duration.ofMillis(2000);
     private static final ObjectMapper objectMapper = new ObjectMapper();
@@ -165,7 +165,7 @@ public class KafkaTailService {
                             rec.offset() + 1, Math::max);
 
                     String valueStr = formatValue(rec.value());
-                    if (hasFilter && !valueStr.toLowerCase().contains(filter.toLowerCase())) continue;
+                    if (hasFilter && !matchesFilter(valueStr, filter)) continue;
 
                     batch.add(new RecordEntry(rec, valueStr));
                 }
@@ -746,6 +746,27 @@ public class KafkaTailService {
             }
         }
         return -1;
+    }
+
+    private boolean matchesFilter(String value, String filter) {
+        if (filter == null || filter.trim().isEmpty()) return true;
+        String trimmed = filter.trim();
+        String valueLower = value.toLowerCase();
+        if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
+            String inner = trimmed.substring(1, trimmed.length() - 1);
+            for (String term : inner.split(",", -1)) {
+                if (!valueLower.contains(term.trim().toLowerCase())) return false;
+            }
+            return true;
+        }
+        if (trimmed.startsWith("[") && trimmed.endsWith("]")) {
+            String inner = trimmed.substring(1, trimmed.length() - 1);
+            for (String term : inner.split(",", -1)) {
+                if (valueLower.contains(term.trim().toLowerCase())) return true;
+            }
+            return false;
+        }
+        return valueLower.contains(trimmed.toLowerCase());
     }
 
     private Properties buildProps(String bootstrapServers, String keyDeser, String valDeser, String topic) {

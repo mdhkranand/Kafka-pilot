@@ -18,6 +18,7 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <kafka.version>3.4.0</kafka.version>
         <javafx.version>17.0.2</javafx.version>
+        <javafx.platform>win</javafx.platform>
         <jackson.version>2.15.2</jackson.version>
         <slf4j.version>2.0.7</slf4j.version>
         <logback.version>1.4.8</logback.version>
@@ -36,21 +37,25 @@
             <groupId>org.openjfx</groupId>
             <artifactId>javafx-base</artifactId>
             <version>${javafx.version}</version>
+            <classifier>${javafx.platform}</classifier>
         </dependency>
         <dependency>
             <groupId>org.openjfx</groupId>
             <artifactId>javafx-graphics</artifactId>
             <version>${javafx.version}</version>
+            <classifier>${javafx.platform}</classifier>
         </dependency>
         <dependency>
             <groupId>org.openjfx</groupId>
             <artifactId>javafx-controls</artifactId>
             <version>${javafx.version}</version>
+            <classifier>${javafx.platform}</classifier>
         </dependency>
         <dependency>
             <groupId>org.openjfx</groupId>
             <artifactId>javafx-fxml</artifactId>
             <version>${javafx.version}</version>
+            <classifier>${javafx.platform}</classifier>
         </dependency>
         
         <!-- Jackson for JSON processing -->
@@ -119,12 +124,12 @@
         <dependency>
             <groupId>com.google.protobuf</groupId>
             <artifactId>protobuf-java</artifactId>
-            <version>3.23.4</version>
+            <version>3.25.5</version>
         </dependency>
         <dependency>
             <groupId>com.google.protobuf</groupId>
             <artifactId>protobuf-java-util</artifactId>
-            <version>3.23.4</version>
+            <version>3.25.5</version>
         </dependency>
         
         <!-- Maven Resolver for runtime dependency resolution -->
@@ -216,11 +221,30 @@
                     </execution>
                 </executions>
             </plugin>
-            
+
         </plugins>
     </build>
-    
+
     <profiles>
+        <profile>
+            <id>windows</id>
+            <properties>
+                <javafx.platform>win</javafx.platform>
+            </properties>
+        </profile>
+        <profile>
+            <id>mac-intel</id>
+            <properties>
+                <javafx.platform>mac</javafx.platform>
+            </properties>
+        </profile>
+        <profile>
+            <id>mac-arm</id>
+            <properties>
+                <javafx.platform>mac-aarch64</javafx.platform>
+            </properties>
+        </profile>
+
         <!-- Cross-platform native packaging with jpackage -->
         <profile>
             <id>package</id>
@@ -256,3 +280,4 @@
         </profile>
     </profiles>
 </project>
+

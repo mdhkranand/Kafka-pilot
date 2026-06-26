@@ -518,19 +518,23 @@ public class KafkaSearchService {
 
     private boolean matchesFilter(String value, String filter) {
         if (filter == null || filter.trim().isEmpty()) return true;
+        String trimmed = filter.trim();
         String valueLower = value.toLowerCase();
-        if (filter.contains(" AND ")) {
-            for (String term : filter.split(" AND ", -1)) {
+        if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
+            String inner = trimmed.substring(1, trimmed.length() - 1);
+            for (String term : inner.split(",", -1)) {
                 if (!valueLower.contains(term.trim().toLowerCase())) return false;
             }
             return true;
-        } else if (filter.contains(" OR ")) {
-            for (String term : filter.split(" OR ", -1)) {
+        }
+        if (trimmed.startsWith("[") && trimmed.endsWith("]")) {
+            String inner = trimmed.substring(1, trimmed.length() - 1);
+            for (String term : inner.split(",", -1)) {
                 if (valueLower.contains(term.trim().toLowerCase())) return true;
             }
             return false;
         }
-        return valueLower.contains(filter.trim().toLowerCase());
+        return valueLower.contains(trimmed.toLowerCase());
     }
 
     private String formatValue(Object val) {

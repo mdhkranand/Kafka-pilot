@@ -66,7 +66,7 @@ public class KafkaConsumerVerifier {
 
         Properties props = new Properties();
         props.put("bootstrap.servers", bootstrapServers);
-        props.put("request.timeout.ms", "15000");
+        props.put("request.timeout.ms", "600000");
 
         log("=== Consumer Verification Started ===");
         log("Topic         : " + topic);

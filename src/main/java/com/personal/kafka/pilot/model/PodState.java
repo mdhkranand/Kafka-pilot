@@ -23,8 +23,6 @@ public class PodState {
     // Search Tab Fields
     private String searchTopic;
     private String searchTextFilter;
-    private String searchTextFilter2;
-    private String searchOperator;
     private boolean searchAllPartitions;
     private String searchSpecificPartitionValue;
     private String sourceOffset;
