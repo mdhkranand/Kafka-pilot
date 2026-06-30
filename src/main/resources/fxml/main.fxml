@@ -499,20 +499,13 @@
                         </ScrollPane>
 
                             <!-- RIGHT: Message Template (35% - full right side) -->
-                            <ScrollPane fitToWidth="true" fitToHeight="true">
-                                <AnchorPane>
-                                    <TitledPane text="Message Template (JSON)" expanded="true" collapsible="false"
-                                                style="-fx-background-color: #ecf0f1; -fx-text-fill: #2c3e50; -fx-padding: 0;"
-                                                AnchorPane.topAnchor="0" AnchorPane.bottomAnchor="0"
-                                                AnchorPane.leftAnchor="0" AnchorPane.rightAnchor="0">
-                                        <AnchorPane>
-                                            <TextArea fx:id="pushMessageTemplateArea"
-                                                      AnchorPane.topAnchor="0" AnchorPane.bottomAnchor="0"
-                                                      AnchorPane.leftAnchor="0" AnchorPane.rightAnchor="0"/>
-                                        </AnchorPane>
-                                    </TitledPane>
-                                </AnchorPane>
-                            </ScrollPane>
+                            <VBox SplitPane.resizableWithParent="true">
+                                <Label text="Message Template (JSON)"
+                                       style="-fx-background-color: #ecf0f1; -fx-text-fill: #2c3e50; -fx-font-weight: bold; -fx-font-size: 12px; -fx-padding: 6 10 6 10; -fx-border-color: #ccc; -fx-border-width: 0 0 1 0;"/>
+                                <TextArea fx:id="pushMessageTemplateArea"
+                                          VBox.vgrow="ALWAYS"
+                                          wrapText="false"/>
+                            </VBox>
                         </SplitPane>
                         </center>
 
