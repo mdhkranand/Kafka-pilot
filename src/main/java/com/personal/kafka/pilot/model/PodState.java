@@ -69,6 +69,9 @@ public class PodState {
     private String verifyTimeout;
     private String verifyPartitionOffsets;
 
+    // Maven Dependency Fields
+    private String mavenDependency;
+
     // Additional properties storage for dynamic fields
     @Builder.Default
     private Map<String, String> additionalProperties = new HashMap<>();

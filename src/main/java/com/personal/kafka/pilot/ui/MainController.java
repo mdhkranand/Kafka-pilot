@@ -985,11 +985,22 @@ public class MainController {
 
     /**
      * Saves the current state of all UI fields for the specified pod.
+     * Only updates if at least one topic field has a value.
      */
     private void saveCurrentPodState(String podName) {
+        String searchTopic = searchTopicComboBox.getValue();
+        String pushTopic = pushTopicComboBox.getValue();
+        String verifyTopic = verifyTopicComboBox.getValue();
+
+        // Only update if at least one topic is set
+        if ((searchTopic == null || searchTopic.isEmpty())) {
+            logger.debug("Skipping pod state update for {}: no topic set", podName);
+            return;
+        }
+
         PodState state = PodState.builder()
                 // Search Tab
-                .searchTopic(searchTopicComboBox.getValue())
+                .searchTopic(searchTopic)
                 .searchTextFilter(searchTextFilter.getText())
                 .searchAllPartitions(searchAllPartitions.isSelected())
                 .searchSpecificPartitionValue(searchPartitionField.getValue())
@@ -1009,7 +1020,7 @@ public class MainController {
                 // Push Tab
                 .sourceTopic(sourceTopicField.getText())
                 .sourcePartition(sourcePartitionField.getText())
-                .pushTopic(pushTopicComboBox.getValue())
+                .pushTopic(pushTopic)
                 .targetPartition(targetPartitionField.getValue())
                 .messageCount(messageCountField.getText())
                 .threadPoolSize(threadPoolSizeField.getText())
@@ -1034,13 +1045,15 @@ public class MainController {
                 .partitionKeyField(keyFieldComboBox.getValue())
                 .partitionKeyConstant(keyConstantField.getText())
                 // Verify Tab
-                .verifyTopic(verifyTopicComboBox.getValue())
+                .verifyTopic(verifyTopic)
                 .verifyTimeout(verifyTimeoutField.getText())
                 .verifyPartitionOffsets(verifyPartitionOffsetsArea.getText())
+                // Maven Dependency Fields
+                .mavenDependency(mavenDependencyField.getText())
                 .build();
 
         podStateMap.put(podName, state);
-        logger.debug("Saved state for pod: {}", podName);
+        logger.debug("Updated state for pod: {}", podName);
     }
 
     /**
@@ -1132,6 +1145,9 @@ public class MainController {
         if (state.getVerifyTopic() != null) verifyTopicComboBox.setValue(state.getVerifyTopic());
         if (state.getVerifyTimeout() != null) verifyTimeoutField.setText(state.getVerifyTimeout());
         if (state.getVerifyPartitionOffsets() != null) verifyPartitionOffsetsArea.setText(state.getVerifyPartitionOffsets());
+
+        // Maven Dependency Fields
+        if (state.getMavenDependency() != null) mavenDependencyField.setText(state.getMavenDependency());
     }
 
     /**
