@@ -243,6 +243,8 @@ public class KafkaSearchService {
 
     private static final int BATCH_SIZE = 30;        // partitions per batch — controls peak memory
     private static final long TAIL_SCAN_WINDOW = 1000L; // messages per partition for text-only scan
+    private static final long AMPLE_SCAN_WINDOW = 10L;  // reduced scan window once we already have ample matches
+    private static final double AMPLE_RESULT_RATIO = 0.8; // fraction of maxResults considered "ample"
 
     /**
      * Searches messages across partitions using a single reusable thread pool.
@@ -332,7 +334,19 @@ public class KafkaSearchService {
             executor.submit(() -> {
                 try {
                     if (stopFlag != null && stopFlag.get()) return;
-                    safeLog.accept("[Search] Starting partition " + tp.partition() + " (" + (idx + 1) + "/" + totalPartitions + ")");
+
+                    // --- Ample-data throttle: skip or shrink scan for remaining partitions once we're close to maxResults ---
+                    int countAtStart = resultCount.get();
+                    if (countAtStart >= maxResults) {
+                        safeLog.accept("[Search] Skipping partition " + tp.partition()
+                                + " - already have " + countAtStart + "/" + maxResults + " result(s)");
+                        return;
+                    }
+                    boolean ample = hasTextFilter && specificOffset == null && fromMs == null && !fromBeginning
+                            && countAtStart >= (int) (maxResults * AMPLE_RESULT_RATIO);
+
+                    safeLog.accept("[Search] Starting partition " + tp.partition() + " (" + (idx + 1) + "/" + totalPartitions + ")"
+                            + (ample ? " [throttled: ample data already collected]" : ""));
 
                     Properties props = buildConsumerProps(bootstrapServers, resolvedKeyDeser, resolvedValDeser, topic);
                     try (KafkaConsumer<String, Object> consumer = new KafkaConsumer<>(props)) {
@@ -352,7 +366,8 @@ public class KafkaSearchService {
                         } else if (hasTextFilter) {
                             long end = endOffsets.getOrDefault(tp, 0L);
                             long begin = beginOffsets.getOrDefault(tp, 0L);
-                            consumer.seek(tp, Math.max(begin, end - TAIL_SCAN_WINDOW));
+                            long window = ample ? AMPLE_SCAN_WINDOW : TAIL_SCAN_WINDOW;
+                            consumer.seek(tp, Math.max(begin, end - window));
                         } else {
                             long end = endOffsets.getOrDefault(tp, 0L);
                             long begin = beginOffsets.getOrDefault(tp, 0L);
